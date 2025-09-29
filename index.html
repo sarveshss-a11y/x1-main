@@ -2254,32 +2254,36 @@ function findFolderById(id, list = folders) {
 
 
 // Helper function to collect all marks from folders and subfolders
+// Enhanced collectAllMarks function
 function collectAllMarks(folderList) {
-  const out = [];
-  
-  if (!folderList || !Array.isArray(folderList)) return out;
+    const out = [];
+    
+    if (!folderList || !Array.isArray(folderList)) return out;
 
-  function recurse(list) {
-    for (const folder of list) {
-      // If this folder has marks, process them
-      if (Array.isArray(folder.marks)) {
-        folder.marks.forEach(mark => {
-          // Ensure every mark has its folderId and folderName
-          if (!mark.folderId) mark.folderId = folder.id;
-          if (!mark.folderName) mark.folderName = folder.name;
-          out.push(mark);
-        });
-      }
+    function recurse(list) {
+        for (const folder of list) {
+            // If this folder has marks, process them
+            if (Array.isArray(folder.marks)) {
+                folder.marks.forEach(mark => {
+                    // Ensure every mark has its folderId and folderName
+                    const processedMark = {
+                        ...mark,
+                        folderId: mark.folderId || folder.id,
+                        folderName: mark.folderName || folder.name
+                    };
+                    out.push(processedMark);
+                });
+            }
 
-      // If this folder has subfolders, recurse
-      if (folder.subfolders && folder.subfolders.length) {
-        recurse(folder.subfolders);
-      }
+            // If this folder has subfolders, recurse
+            if (folder.subfolders && folder.subfolders.length) {
+                recurse(folder.subfolders);
+            }
+        }
     }
-  }
 
-  recurse(folderList);
-  return out;
+    recurse(folderList);
+    return out;
 }
 
 // Marks functions
@@ -2617,7 +2621,8 @@ function showStudentDetailsModal() {
 
 // Generate result sheet in PDF format
 // Fix for html2canvas error and chart generation issues
-function generateResultSheet() {
+// Replace the generateResultSheet function with this:
+async function generateResultSheet() {
     const studentName = document.getElementById('student-name').value.trim();
     const rollNumber = document.getElementById('roll-number').value.trim();
     const schoolName = document.getElementById('school-name').value.trim();
@@ -2630,13 +2635,24 @@ function generateResultSheet() {
     
     hideModal('student-details-modal');
     
-    // Create result sheet HTML
-    const resultHTML = createResultSheetHTML(studentName, rollNumber, schoolName, imageFile);
+    // Process image first (if any)
+    let imageDataURL = null;
+    if (imageFile) {
+        try {
+            imageDataURL = await readFileAsDataURL(imageFile);
+        } catch (error) {
+            console.error('Error reading image file:', error);
+            alert('Error processing image. Continuing without photo.');
+        }
+    }
+    
+    // Create result sheet HTML with actual image
+    const resultHTML = createResultSheetHTML(studentName, rollNumber, schoolName, imageDataURL);
     
     // Create a temporary container for html2canvas
     const tempContainer = document.createElement('div');
     tempContainer.style.position = 'fixed';
-    tempContainer.style.left = '0';
+    tempContainer.style.left = '-9999px'; // Move off-screen instead of 0,0
     tempContainer.style.top = '0';
     tempContainer.style.width = '794px';
     tempContainer.style.height = '1123px'; // A4 height
@@ -2648,41 +2664,69 @@ function generateResultSheet() {
     
     document.body.appendChild(tempContainer);
     
+    // Wait a bit for images to load
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     // Use html2canvas with proper configuration
-    html2canvas(tempContainer, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        width: 794,
-        height: 1123,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: 794,
-        windowHeight: 1123
-    }).then(canvas => {
+    try {
+        const canvas = await html2canvas(tempContainer, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            width: 794,
+            height: 1123,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: 794,
+            windowHeight: 1123,
+            onclone: function(clonedDoc) {
+                // Ensure images are loaded in the cloned document
+                const images = clonedDoc.querySelectorAll('img');
+                images.forEach(img => {
+                    if (img.complete) return;
+                    img.onload = function() {
+                        console.log('Image loaded in clone');
+                    };
+                });
+            }
+        });
+        
         const link = document.createElement('a');
         link.download = `Result_Sheet_${studentName}_${rollNumber}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
         
-        // Remove temporary container
-        document.body.removeChild(tempContainer);
-    }).catch(error => {
+    } catch (error) {
         console.error('Error generating result sheet:', error);
         alert('Error generating result sheet. Please try again.');
+    } finally {
+        // Remove temporary container
         document.body.removeChild(tempContainer);
+    }
+}
+
+function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(e);
+        reader.readAsDataURL(file);
     });
 }
 
 // Create result sheet HTML structure
-function createResultSheetHTML(studentName, rollNumber, schoolName, imageFile) {
+// Replace the createResultSheetHTML function with this:
+function createResultSheetHTML(studentName, rollNumber, schoolName, imageDataURL) {
     let imageHTML = '';
-    if (imageFile) {
-        // For html2canvas, we need to use a data URL
-        const reader = new FileReader();
-        reader.readAsDataURL(imageFile);
-        // Note: This is async, so we'll create a placeholder
-        imageHTML = '<div style="width: 100px; height: 120px; background: #f0f0f0; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; color: #666;">Photo</div>';
+    if (imageDataURL) {
+        imageHTML = `
+            <div style="margin-left: 20px;">
+                <img src="${imageDataURL}" 
+                     style="width: 100px; height: 120px; object-fit: cover; border: 1px solid #ddd; border-radius: 4px;" 
+                     alt="Student Photo"
+                     onerror="this.style.display='none'">
+            </div>
+        `;
     }
     
     return `
@@ -2701,7 +2745,7 @@ function createResultSheetHTML(studentName, rollNumber, schoolName, imageFile) {
                     <p style="margin: 8px 0;"><strong>School:</strong> ${schoolName}</p>
                     <p style="margin: 8px 0;"><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
                 </div>
-                ${imageHTML ? `<div style="margin-left: 20px;">${imageHTML}</div>` : ''}
+                ${imageHTML}
             </div>
             
             <!-- Round-wise Results -->
@@ -2710,8 +2754,18 @@ function createResultSheetHTML(studentName, rollNumber, schoolName, imageFile) {
                 if (!round) return '';
                 
                 const roundMarks = collectAllMarks([round]);
-                const totalMarks = roundMarks.reduce((sum, m) => sum + m.totalMarks, 0);
-                const obtainedMarks = roundMarks.reduce((sum, m) => sum + m.marksObtained, 0);
+                
+                if (roundMarks.length === 0) {
+                    return `
+                        <div style="margin-bottom: 40px; page-break-inside: avoid;">
+                            <h3 style="background: #1834c1; color: white; padding: 12px; margin: 0 0 15px 0; border-radius: 4px;">${round.name} - Performance Summary</h3>
+                            <p style="text-align: center; padding: 20px; color: #666;">No marks available for this round</p>
+                        </div>
+                    `;
+                }
+                
+                const totalMarks = roundMarks.reduce((sum, m) => sum + (Number(m.totalMarks) || 0), 0);
+                const obtainedMarks = roundMarks.reduce((sum, m) => sum + (Number(m.marksObtained) || 0), 0);
                 const percentage = totalMarks > 0 ? ((obtainedMarks / totalMarks) * 100).toFixed(2) : 0;
                 
                 return `
@@ -2733,9 +2787,9 @@ function createResultSheetHTML(studentName, rollNumber, schoolName, imageFile) {
                                     const grade = getGrade(markPercentage);
                                     return `
                                         <tr>
-                                            <td style="border: 1px solid #ddd; padding: 10px;">${mark.subject}</td>
-                                            <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${mark.marksObtained}</td>
-                                            <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${mark.totalMarks}</td>
+                                            <td style="border: 1px solid #ddd; padding: 10px;">${mark.subject || 'Unknown Subject'}</td>
+                                            <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${mark.marksObtained || 0}</td>
+                                            <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${mark.totalMarks || 0}</td>
                                             <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${markPercentage}%</td>
                                             <td style="border: 1px solid #ddd; padding: 10px; text-align: center; font-weight: bold;">${grade}</td>
                                         </tr>
@@ -3001,28 +3055,33 @@ async function deleteAccount() {
         item.appendChild(actions);
 
         // Enhanced click handler
-        item.addEventListener('click', () => {
-            selectedFolderId = folder.id;
-            
-            // Update folder select dropdown
-            const folderSelect = document.getElementById('folder-select');
-            if (folderSelect) folderSelect.value = folder.id;
-            
-            // Update marks folder dropdown
-            const marksFolder = document.getElementById('marks-folder');
-            if (marksFolder) marksFolder.value = folder.id;
-            
-            // Highlight active folder
-            const allFolderEls = sidebar.querySelectorAll('.folder-item');
-            allFolderEls.forEach(el => el.classList.remove('active-folder'));
-            item.classList.add('active-folder');
-            
-            // Render marks for this folder only
-            renderMarksTable(folder.id);
-            
-            // Render chart for this folder
-            renderMultiRoundChart([folder.id]);
-        });
+       // Update the folder click handler in renderFolders function:
+item.addEventListener('click', () => {
+    selectedFolderId = folder.id;
+    
+    // Update folder select dropdown
+    const folderSelect = document.getElementById('folder-select');
+    if (folderSelect) folderSelect.value = folder.id;
+    
+    // Update marks folder dropdown
+    const marksFolder = document.getElementById('marks-folder');
+    if (marksFolder) marksFolder.value = folder.id;
+    
+    // Highlight active folder
+    const allFolderEls = sidebar.querySelectorAll('.folder-item');
+    allFolderEls.forEach(el => el.classList.remove('active-folder'));
+    item.classList.add('active-folder');
+    
+    // Render marks for this folder only
+    renderMarksTable(folder.id);
+    
+    // Render chart for this folder
+    if (selectedRoundsForChart.length > 0) {
+        renderMultiRoundChart(selectedRoundsForChart);
+    } else {
+        renderMultiRoundChart([folder.id]);
+    }
+});
 
         parentEl.appendChild(item);
 
@@ -3342,20 +3401,26 @@ document.getElementById('import-file').addEventListener('change', (e) => {
 // 👁️ PASSWORD TOGGLE
 // ===============================
 function setupPasswordToggles() {
-    document.querySelectorAll('.toggle-password').forEach(button => {
-        button.addEventListener('click', () => {
-            const input = button.parentElement.querySelector('input');
-            if (!input) return;
+    // Wait for DOM to be fully loaded
+    setTimeout(() => {
+        document.querySelectorAll('.toggle-password').forEach(button => {
+            button.addEventListener('click', function() {
+                const input = this.parentElement.querySelector('input');
+                if (!input) return;
 
-            if (input.type === "password") {
-                input.type = "text";
-                button.textContent = "🙈";
-            } else {
-                input.type = "password";
-                button.textContent = "👁️";
-            }
+                if (input.type === "password") {
+                    input.type = "text";
+                    this.textContent = "🙈";
+                } else {
+                    input.type = "password";
+                    this.textContent = "👁️";
+                }
+            });
         });
-    });
+    }, 100);
+}
+function reinitializePasswordToggles() {
+    setupPasswordToggles();
 }
 
 function showRoundSelectionModal() {
@@ -3700,6 +3765,11 @@ function showPage(pageId) {
         page.classList.remove('active');
     });
     document.getElementById(pageId).classList.add('active');
+    
+    // Reinitialize password toggles for the new page
+    setTimeout(() => {
+        setupPasswordToggles();
+    }, 200);
 }
 
 function showModal(modalId) {
