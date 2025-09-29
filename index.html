@@ -7,6 +7,8 @@
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script
             src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
         <style>
         .toggle-arrow {
     margin-right: 8px;
@@ -848,7 +850,43 @@ body.dark-mode #average-percentage {
             margin-right: 10px;
             font-style: normal;
         }
+.subject-tag {
+    display: inline-flex;
+    align-items: center;
+    background: var(--primary);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    margin: 4px;
+    font-size: 0.9rem;
+    transition: var(--transition);
+}
 
+.subject-tag:hover {
+    background: var(--primary-dark);
+    transform: translateY(-2px);
+}
+
+.delete-subject {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border: none;
+    color: white !important;
+    margin-left: 8px !important;
+    cursor: pointer;
+    font-size: 14px !important;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.delete-subject:hover {
+    background: rgba(255, 255, 255, 0.5) !important;
+    transform: scale(1.1);
+}
         .settings-option {
             display: flex;
             justify-content: space-between;
@@ -1300,6 +1338,11 @@ const dataAPI = {
     clearAllData: async () => 
         await apiRequest('/api/clear-data', {
             method: 'DELETE',
+        }),
+        saveUserData: async (folders, subjects) => 
+        await apiRequest('/api/user/data', {
+            method: 'POST',
+            body: { folders, subjects },
         }),
 };
 </script>
@@ -2401,13 +2444,13 @@ function filterMarksByFolder() {
     const selectedValue = document.getElementById("folder-select").value;
     
     if (selectedValue === "all") {
-        selectedFolderId = null; // Show all folders
+        selectedFolderId = null;
     } else {
-        selectedFolderId = selectedValue; // Show specific folder
+        selectedFolderId = selectedValue;
     }
     
     renderMarksTable();
-    renderChart();
+    renderChart(); // Chart updates to show selected folder only
 }
 
 
@@ -2659,74 +2702,260 @@ async function generateResultSheet() {
     
     hideModal('student-details-modal');
     
-    // Process image first (if any)
+    // Process image
     let imageDataURL = null;
     if (imageFile) {
         try {
             imageDataURL = await readFileAsDataURL(imageFile);
         } catch (error) {
             console.error('Error reading image file:', error);
-            alert('Error processing image. Continuing without photo.');
         }
     }
     
-    // Create result sheet HTML with actual image
-    const resultHTML = createResultSheetHTML(studentName, rollNumber, schoolName, imageDataURL);
+    // Generate PDF
+    generatePDFResult(studentName, rollNumber, schoolName, imageDataURL);
+}
+
+function generatePDFResult(studentName, rollNumber, schoolName, imageDataURL) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
     
-    // Create a temporary container for html2canvas
-    const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'fixed';
-    tempContainer.style.left = '-9999px'; // Move off-screen instead of 0,0
-    tempContainer.style.top = '0';
-    tempContainer.style.width = '794px';
-    tempContainer.style.height = '1123px'; // A4 height
-    tempContainer.style.padding = '40px';
-    tempContainer.style.backgroundColor = 'white';
-    tempContainer.style.zIndex = '10000';
-    tempContainer.style.overflow = 'hidden';
-    tempContainer.innerHTML = resultHTML;
+    let currentPage = 1;
+    let yPosition = 20;
     
-    document.body.appendChild(tempContainer);
+    // Header
+    doc.setFontSize(20);
+    doc.setTextColor(24, 52, 193);
+    doc.text('ACADEMIC PERFORMANCE REPORT', 105, yPosition, { align: 'center' });
     
-    // Wait a bit for images to load
-    await new Promise(resolve => setTimeout(resolve, 500));
+    doc.setFontSize(14);
+    doc.setTextColor(102, 102, 102);
+    doc.text(schoolName, 105, yPosition + 8, { align: 'center' });
     
-    // Use html2canvas with proper configuration
-    try {
-        const canvas = await html2canvas(tempContainer, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            width: 794,
-            height: 1123,
-            scrollX: 0,
-            scrollY: 0,
-            windowWidth: 794,
-            windowHeight: 1123,
-            onclone: function(clonedDoc) {
-                // Ensure images are loaded in the cloned document
-                const images = clonedDoc.querySelectorAll('img');
-                images.forEach(img => {
-                    if (img.complete) return;
-                    img.onload = function() {
-                        console.log('Image loaded in clone');
-                    };
-                });
+    yPosition += 30;
+    
+    // Student Info Section
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    
+    // Student details
+    doc.text(`Student Name: ${studentName}`, 20, yPosition);
+    doc.text(`Roll Number: ${rollNumber}`, 20, yPosition + 7);
+    doc.text(`School: ${schoolName}`, 20, yPosition + 14);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, yPosition + 21);
+    
+    // Student photo (if available)
+    if (imageDataURL) {
+        try {
+            doc.addImage(imageDataURL, 'JPEG', 150, yPosition - 10, 40, 50);
+        } catch (error) {
+            console.error('Error adding image to PDF:', error);
+        }
+    }
+    
+    yPosition += 40;
+    
+    // Process each selected folder
+    selectedRoundsForResult.forEach((folderId, index) => {
+        const folder = folders.find(f => f.id === folderId);
+        if (!folder) return;
+        
+        const folderMarks = folder.marks || [];
+        
+        // Check if we need a new page
+        if (yPosition > 200) {
+            doc.addPage();
+            currentPage++;
+            yPosition = 20;
+        }
+        
+        // Folder header
+        doc.setFontSize(14);
+        doc.setTextColor(24, 52, 193);
+        doc.text(`${folder.name} - Performance Summary`, 20, yPosition);
+        
+        yPosition += 10;
+        
+        if (folderMarks.length === 0) {
+            doc.setFontSize(10);
+            doc.setTextColor(102, 102, 102);
+            doc.text('No marks available for this round', 20, yPosition);
+            yPosition += 20;
+            return;
+        }
+        
+        // Table headers
+        const headers = [['Subject', 'Marks Obtained', 'Total Marks', 'Percentage', 'Grade']];
+        
+        // Table data
+        const tableData = folderMarks.map(mark => {
+            const percentage = mark.totalMarks > 0 ? 
+                ((mark.marksObtained / mark.totalMarks) * 100).toFixed(2) : 0;
+            const grade = getGrade(percentage);
+            
+            return [
+                mark.subject || 'Unknown',
+                mark.marksObtained.toString(),
+                mark.totalMarks.toString(),
+                `${percentage}%`,
+                grade
+            ];
+        });
+        
+        // Calculate folder totals
+        const totalMarks = folderMarks.reduce((sum, m) => sum + (Number(m.totalMarks) || 0), 0);
+        const obtainedMarks = folderMarks.reduce((sum, m) => sum + (Number(m.marksObtained) || 0), 0);
+        const averagePercentage = totalMarks > 0 ? ((obtainedMarks / totalMarks) * 100).toFixed(2) : 0;
+        const overallGrade = getGrade(averagePercentage);
+        
+        // Add total row
+        tableData.push([
+            'OVERALL TOTAL',
+            obtainedMarks.toString(),
+            totalMarks.toString(),
+            `${averagePercentage}%`,
+            overallGrade
+        ]);
+        
+        // Generate table
+        doc.autoTable({
+            startY: yPosition,
+            head: headers,
+            body: tableData,
+            theme: 'grid',
+            headStyles: {
+                fillColor: [24, 52, 193],
+                textColor: 255,
+                fontStyle: 'bold'
+            },
+            bodyStyles: {
+                textColor: 0
+            },
+            alternateRowStyles: {
+                fillColor: [240, 240, 240]
+            },
+            styles: {
+                fontSize: 9,
+                cellPadding: 3
+            },
+            didDrawPage: function (data) {
+                // Footer
+                doc.setFontSize(8);
+                doc.setTextColor(128, 128, 128);
+                doc.text(`Generated by Marks Explorer - Page ${currentPage}`, 105, 290, { align: 'center' });
             }
         });
         
-        const link = document.createElement('a');
-        link.download = `Result_Sheet_${studentName}_${rollNumber}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
+        yPosition = doc.lastAutoTable.finalY + 15;
+    });
+    
+    // Final Summary Page
+    doc.addPage();
+    currentPage++;
+    
+    // Final Summary Header
+    doc.setFontSize(16);
+    doc.setTextColor(24, 52, 193);
+    doc.text('FINAL ACADEMIC SUMMARY', 105, 30, { align: 'center' });
+    
+    yPosition = 50;
+    
+    // Overall performance table
+    const summaryHeaders = [['Folder', 'Total Marks', 'Obtained Marks', 'Average %', 'Overall Grade']];
+    const summaryData = [];
+    
+    let grandTotalMarks = 0;
+    let grandObtainedMarks = 0;
+    
+    selectedRoundsForResult.forEach(folderId => {
+        const folder = folders.find(f => f.id === folderId);
+        if (!folder) return;
         
-    } catch (error) {
-        console.error('Error generating result sheet:', error);
-        alert('Error generating result sheet. Please try again.');
-    } finally {
-        // Remove temporary container
-        document.body.removeChild(tempContainer);
-    }
+        const folderMarks = folder.marks || [];
+        const totalMarks = folderMarks.reduce((sum, m) => sum + (Number(m.totalMarks) || 0), 0);
+        const obtainedMarks = folderMarks.reduce((sum, m) => sum + (Number(m.marksObtained) || 0), 0);
+        const averagePercentage = totalMarks > 0 ? ((obtainedMarks / totalMarks) * 100).toFixed(2) : 0;
+        const grade = getGrade(averagePercentage);
+        
+        summaryData.push([
+            folder.name,
+            totalMarks.toString(),
+            obtainedMarks.toString(),
+            `${averagePercentage}%`,
+            grade
+        ]);
+        
+        grandTotalMarks += totalMarks;
+        grandObtainedMarks += obtainedMarks;
+    });
+    
+    // Grand total
+    const grandAverage = grandTotalMarks > 0 ? ((grandObtainedMarks / grandTotalMarks) * 100).toFixed(2) : 0;
+    const grandGrade = getGrade(grandAverage);
+    
+    summaryData.push([
+        'GRAND TOTAL',
+        grandTotalMarks.toString(),
+        grandObtainedMarks.toString(),
+        `${grandAverage}%`,
+        grandGrade
+    ]);
+    
+    // Generate summary table
+    doc.autoTable({
+        startY: yPosition,
+        head: summaryHeaders,
+        body: summaryData,
+        theme: 'grid',
+        headStyles: {
+            fillColor: [24, 52, 193],
+            textColor: 255,
+            fontStyle: 'bold'
+        },
+        bodyStyles: {
+            textColor: 0
+        },
+        alternateRowStyles: {
+            fillColor: [240, 240, 240]
+        },
+        styles: {
+            fontSize: 10,
+            cellPadding: 4
+        },
+        willDrawCell: function (data) {
+            if (data.section === 'body' && data.row.index === summaryData.length - 1) {
+                doc.setFillColor(24, 52, 193);
+                doc.setTextColor(255, 255, 255);
+                doc.setFontStyle('bold');
+            }
+        }
+    });
+    
+    // Performance Chart (Simple text-based)
+    yPosition = doc.lastAutoTable.finalY + 20;
+    
+    doc.setFontSize(12);
+    doc.setTextColor(24, 52, 193);
+    doc.text('PERFORMANCE ANALYSIS', 20, yPosition);
+    
+    yPosition += 10;
+    
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    
+    // Performance analysis
+    const performanceRemarks = getPerformanceRemarks(grandAverage);
+    doc.text(`Overall Performance: ${performanceRemarks}`, 20, yPosition);
+    doc.text(`Final Grade: ${grandGrade}`, 20, yPosition + 7);
+    doc.text(`Total Percentage: ${grandAverage}%`, 20, yPosition + 14);
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(128, 128, 128);
+    doc.text(`Generated by Marks Explorer - ${new Date().toLocaleString()}`, 105, 290, { align: 'center' });
+    
+    // Save PDF
+    doc.save(`Result_${studentName}_${rollNumber}.pdf`);
 }
 
 function readFileAsDataURL(file) {
@@ -2737,7 +2966,15 @@ function readFileAsDataURL(file) {
         reader.readAsDataURL(file);
     });
 }
-
+function getPerformanceRemarks(percentage) {
+    if (percentage >= 90) return 'Outstanding - Excellent performance!';
+    if (percentage >= 80) return 'Very Good - Strong academic performance';
+    if (percentage >= 70) return 'Good - Consistent performance';
+    if (percentage >= 60) return 'Satisfactory - Meets expectations';
+    if (percentage >= 50) return 'Average - Room for improvement';
+    if (percentage >= 40) return 'Below Average - Needs attention';
+    return 'Poor - Requires significant improvement';
+}
 // Create result sheet HTML structure
 // Replace the createResultSheetHTML function with this:
 function createResultSheetHTML(studentName, rollNumber, schoolName, imageDataURL) {
@@ -3079,14 +3316,18 @@ async function deleteAccount() {
         `;
 
         // Click to select folder
-        folderItem.addEventListener('click', (e) => {
-            if (!e.target.closest('.folder-actions')) {
-                selectedFolderId = folder.id;
-                renderFolders();
-                renderMarksTable();
-                renderChart();
-            }
-        });
+      folderItem.addEventListener('click', (e) => {
+    if (!e.target.closest('.folder-actions')) {
+        selectedFolderId = folder.id;
+        renderFolders();
+        renderMarksTable();
+        renderChart(); // This will now show only the selected folder
+        
+        // Update the folder filter dropdown
+        const folderSelect = document.getElementById('folder-select');
+        if (folderSelect) folderSelect.value = folder.id;
+    }
+});
 
         sidebar.appendChild(folderItem);
     });
@@ -3557,71 +3798,23 @@ function renderChart() {
     const ctx = document.getElementById('progress-chart').getContext('2d');
     if (chart) chart.destroy();
 
-    const labels = marks.map(m => m.subject);
-    const percentages = marks.map(m => 
-        m.totalMarks > 0 ? ((m.marksObtained / m.totalMarks) * 100).toFixed(2) : 0
-    );
-
-    // Generate unique colors for each subject
-    const colorPalette = [
-        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', 
-        '#FF9F40', '#8ac6d1', '#ff6b6b', '#a5dee5', '#ffaaab'
-    ];
-    
-    const backgroundColors = [];
-    const subjectColorMap = {};
-    
-    // Assign a consistent color to each subject
-    marks.forEach((mark, index) => {
-        if (!subjectColorMap[mark.subject]) {
-            subjectColorMap[mark.subject] = colorPalette[Object.keys(subjectColorMap).length % colorPalette.length];
-        }
-        backgroundColors.push(subjectColorMap[mark.subject]);
-    });
-
-    chart = new Chart(ctx, {
-        type: chartType,
-        data: {
-            labels,
-            datasets: [{
-                label: 'Percentage',
-                data: percentages,
-                backgroundColor: backgroundColors,
-                borderColor: 'rgba(0,0,0,0.1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-                legend: { 
-                    display: true,
-                    position: 'right'
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const mark = marks[context.dataIndex];
-                            return `${mark.marksObtained}/${mark.totalMarks} (${context.raw}%)`;
-                        }
-                    }
-                }
-            },
-            scales: { y: { beginAtZero: true, max: 100 } }
-        }
-    });
-}function renderChart() {
-    const ctx = document.getElementById('progress-chart').getContext('2d');
-    if (chart) chart.destroy();
-
+    // Only show marks from selected folder
     let marksToShow = [];
-
     if (selectedFolderId) {
         const folder = folders.find(f => f.id === selectedFolderId);
         marksToShow = folder ? (folder.marks || []) : [];
     } else {
-        marksToShow = folders.flatMap(folder => folder.marks || []);
+        // If no folder selected, show empty chart
+        marksToShow = [];
+    }
+
+    if (marksToShow.length === 0) {
+        // Show empty chart message
+        ctx.font = "16px Arial";
+        ctx.fillStyle = "#666";
+        ctx.textAlign = "center";
+        ctx.fillText("No marks available for selected folder", ctx.canvas.width / 2, ctx.canvas.height / 2);
+        return;
     }
 
     const labels = marksToShow.map(m => m.subject);
@@ -3629,12 +3822,16 @@ function renderChart() {
         m.totalMarks > 0 ? ((m.marksObtained / m.totalMarks) * 100).toFixed(2) : 0
     );
 
+    // Get current folder name for chart title
+    const currentFolder = folders.find(f => f.id === selectedFolderId);
+    const folderName = currentFolder ? currentFolder.name : 'Selected Folder';
+
     chart = new Chart(ctx, {
         type: chartType,
         data: {
             labels,
             datasets: [{
-                label: 'Percentage',
+                label: `Percentage - ${folderName}`,
                 data: percentages,
                 backgroundColor: percentages.map(p =>
                     p >= 75 ? 'rgba(6,214,160,0.7)' :
@@ -3649,17 +3846,41 @@ function renderChart() {
             responsive: true,
             maintainAspectRatio: false,
             plugins: { 
-                legend: { display: false },
+                title: {
+                    display: true,
+                    text: `Performance Chart - ${folderName}`,
+                    font: {
+                        size: 16
+                    }
+                },
+                legend: { 
+                    display: chartType === 'pie' || chartType === 'doughnut'
+                },
                 tooltip: {
                     callbacks: {
                         label: function(context) {
                             const mark = marksToShow[context.dataIndex];
-                            return `${mark.marksObtained}/${mark.totalMarks} (${context.raw}%)`;
+                            return `${mark.subject}: ${mark.marksObtained}/${mark.totalMarks} (${context.raw}%)`;
                         }
                     }
                 }
             },
-            scales: { y: { beginAtZero: true, max: 100 } }
+            scales: { 
+                y: { 
+                    beginAtZero: true, 
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Percentage (%)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Subjects'
+                    }
+                }
+            }
         }
     });
 }
@@ -3887,39 +4108,31 @@ function clearUI() {
 // ===============================
 async function loadUserData() {
   try {
-    // use dataAPI wrapper (it adds auth header)
     const data = await dataAPI.getUserData();
 
-    // normalize user object
     currentUser = data.user || { username: data.username || data.user?.username || 'User' };
-
-    // normalize folders
     folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
 
-    // ensure each folder has subfolders array to avoid runtime checks elsewhere
-    function ensureSubfolders(list) {
-      list.forEach(f => {
-        if (!f.subfolders) f.subfolders = [];
-        ensureSubfolders(f.subfolders);
-      });
+    // Load subjects from database OR fallback to localStorage
+    if (data.subjects && Array.isArray(data.subjects)) {
+        customSubjects = data.subjects;
+        localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+    } else {
+        // Fallback to localStorage
+        customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
     }
-    ensureSubfolders(folders);
 
-    // collect marks array for quick global stats and lookups
-    marks = collectAllMarks(folders);
-
-    // update UI
+    // Update UI
     document.getElementById('user-name').textContent = currentUser.username || 'User';
     document.getElementById('user-avatar').textContent = (currentUser.username || 'U').charAt(0).toUpperCase();
 
     renderFolders();
     populateFolderSelect();
-    renderMarksTable(selectedFolderId || 'all');
+    renderMarksTable();
     updateStats();
-    renderChart(selectedFolderId || 'all');
+    renderChart();
+    renderSubjects(); // Make sure this is called
 
-    // optional: update api status
-    checkApiConnection();
   } catch (err) {
     console.error('Error loading user data:', err);
     showError('login-error', err.message || 'Failed to load user data.');
@@ -4047,7 +4260,7 @@ function renderSubjects() {
             tag.innerHTML = `
                 ${subject}
                 <button class="delete-subject" onclick="removeSubject('${subject}')" 
-                        style="background: none; border: none; color: white; margin-left: 5px; cursor: pointer; font-size: 12px;">
+                        style="background: none; border: none; color: white; margin-left: 5px; cursor: pointer; font-size: 12px; padding: 2px 4px; border-radius: 50%;">
                     ×
                 </button>
             `;
@@ -4098,11 +4311,18 @@ function addSubject(subjectName = null) {
     if (subject && !customSubjects.includes(subject)) {
         customSubjects.push(subject);
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+        
+        // Also save to database if possible
+        try {
+            dataAPI.saveUserData(folders, customSubjects);
+        } catch (error) {
+            console.log('Subjects saved locally only');
+        }
+        
         renderSubjects();
-        updateMarksForm(); // Update the dropdown in marks form
+        updateMarksForm();
         
         if (!subjectName) {
-            // Clear input only if called from the button
             const subjectInput = document.getElementById('new-subject');
             if (subjectInput) subjectInput.value = '';
         }
@@ -4113,6 +4333,14 @@ function removeSubject(subject) {
     if (confirm(`Delete subject "${subject}"?`)) {
         customSubjects = customSubjects.filter(s => s !== subject);
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+        
+        // Also update database
+        try {
+            dataAPI.saveUserData(folders, customSubjects);
+        } catch (error) {
+            console.log('Subjects updated locally only');
+        }
+        
         renderSubjects();
     }
 }
