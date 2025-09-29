@@ -1,0 +1,3597 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Marks Explorer with Data Persistence</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script
+            src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+        <style>
+        .toggle-arrow {
+    margin-right: 8px;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    display: inline-block;
+    width: 15px;
+    text-align: center;
+}
+
+.toggle-arrow.collapsed {
+    transform: rotate(-90deg);
+}
+
+.folder-tree-content {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: var(--border-radius);
+    margin-bottom: 5px;
+    transition: var(--transition);
+}
+
+.folder-tree-content:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+        /* Average percentage box */
+#average-percentage {
+    font-weight: bold;
+    font-size: 1.2rem;
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
+/* Add to existing CSS */
+.subject-tag {
+    display: inline-block;
+    background: var(--primary);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    margin: 2px;
+    font-size: 0.8rem;
+}
+
+.subject-input-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.subjects-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+}
+/* Light mode */
+body.light-mode #average-percentage {
+    color: #1a1a1a;       /* dark text */
+    background-color: #f3f3f3;
+}
+
+/* Dark mode */
+body.dark-mode #average-percentage {
+    color: #ffffff;       /* white text */
+    background-color: #333333;
+}
+
+        .api-status {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+        }
+
+        .api-status.connected {
+            background-color: var(--success);
+            color: white;
+        }
+.stat-card .stat-value div:first-child {
+    font-size: 2.5rem;
+    font-weight: 700;
+}
+
+.stat-card .stat-value div:last-child {
+    font-size: 1rem;
+    opacity: 0.8;
+    margin-top: 5px;
+}
+        .api-status.disconnected {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        /* Dark theme styles */
+        body.dark-theme {
+            background: linear-gradient(135deg, #2c3e50 0%, #1a1a2e 100%);
+            color: #f8f9fa;
+        }
+
+        body.dark-theme .container {
+            background: rgba(33, 37, 41, 0.95);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        body.dark-theme .form-control {
+            background-color: #495057;
+            border-color: #6c757d;
+            color: #f8f9fa;
+        }
+
+        body.dark-theme .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.3);
+        }
+
+        body.dark-theme .stat-card,
+        body.dark-theme .marks-form,
+        body.dark-theme .marks-list,
+        body.dark-theme .progress-report,
+        body.dark-theme .settings-container {
+            background: #343a40;
+            color: #f8f9fa;
+        }
+
+        body.dark-theme .marks-table th {
+            background-color: #495057;
+            color: #f8f9fa;
+        }
+
+        body.dark-theme .marks-table tr:hover {
+            background-color: rgba(67, 97, 238, 0.1);
+        }
+
+        body.dark-theme .sidebar {
+            background-color: var(--primary-dark);
+        }
+
+        body.dark-theme .main-content {
+            background-color: #2d3748;
+        }
+
+        body.dark-theme .content-header {
+            border-bottom-color: #495057;
+        }
+
+        body.dark-theme .settings-option {
+            background-color: #495057;
+        }
+
+        body.dark-theme .settings-option:hover {
+            background-color: #5a6268;
+        }
+
+        body.dark-theme .danger-zone {
+            background-color: #4a1c1c;
+        }
+
+        :root {
+            --primary: #1834c1;
+            --primary-dark: #3a56d4;
+            --secondary: #7209b7;
+            --success: #06d6a0;
+            --danger: #ef476f;
+            --warning: #ffd166;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --light-gray: #e9ecef;
+            --border-radius: 8px;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: var(--dark);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            transition: var(--transition);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            transition: var(--transition);
+        }
+
+        .page {
+            padding: 30px;
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: var(--primary);
+            margin-bottom: 10px;
+            font-size: 2.2rem;
+        }
+
+        .header p {
+            color: var(--gray);
+            font-size: 1.1rem;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--dark);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid var(--light-gray);
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            transition: var(--transition);
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+
+        .password-container {
+            position: relative;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--gray);
+            font-size: 18px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .btn-block {
+            display: block;
+            width: 100%;
+        }
+
+        .btn-success {
+            background-color: var(--success);
+        }
+
+        .btn-success:hover {
+            background-color: #05b387;
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+        }
+
+        .btn-danger:hover {
+            background-color: #e73664;
+        }
+
+        .btn-warning {
+            background-color: var(--warning);
+            color: var(--dark);
+        }
+
+        .btn-warning:hover {
+            background-color: #f9c74f;
+        }
+
+        .btn-info {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background-color: #138496;
+        }
+
+        .alert {
+            padding: 12px 15px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .alert-error {
+            background-color: #feeaea;
+            color: var(--danger);
+            border-left: 4px solid var(--danger);
+        }
+
+        .alert-success {
+            background-color: #e6f7f2;
+            color: var(--success);
+            border-left: 4px solid var(--success);
+        }
+
+        .link {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: var(--transition);
+        }
+
+        .link:hover {
+            text-decoration: underline;
+        }
+
+        .app-container {
+            display: flex;
+            min-height: 600px;
+        }
+
+        .sidebar {
+            width: 280px;
+            background-color: var(--primary);
+            color: white;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            background-color: var(--light);
+            overflow-y: auto;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .user-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: var(--secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: bold;
+            margin-right: 15px;
+        }
+
+        .user-details {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .user-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-role {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+
+        .nav-section {
+            margin-bottom: 25px;
+        }
+
+        .nav-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            opacity: 0.7;
+        }
+
+        .folder-structure {
+            margin-top: 20px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .folder-item {
+            padding: 8px 12px;
+            border-radius: var(--border-radius);
+            margin-bottom: 5px;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+        }
+
+        .folder-item:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .folder-icon {
+            margin-right: 10px;
+        }
+
+        .folder-content {
+            flex: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-width: 0; /* Allows text truncation */
+        }
+
+        .folder-name {
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .folder-percentage {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            flex-shrink: 0;
+            margin-left: 8px;
+        }
+
+        .folder-actions {
+            display: flex;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--light-gray);
+        }
+
+        .theme-switch {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .theme-switch-text {
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .marks-form {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+        }
+
+        .form-title {
+            margin-bottom: 20px;
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .marks-list {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+        }
+
+        .marks-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .marks-table th,
+        .marks-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--light-gray);
+        }
+
+        .marks-table th {
+            background-color: var(--light-gray);
+            font-weight: 600;
+        }
+
+        .marks-table tr:hover {
+            background-color: rgba(67, 97, 238, 0.05);
+        }
+
+        .percentage {
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        .percentage.high {
+            background-color: rgba(6, 214, 160, 0.2);
+            color: var(--success);
+        }
+
+        .percentage.medium {
+            background-color: rgba(255, 209, 102, 0.2);
+            color: var(--warning);
+        }
+
+        .percentage.low {
+            background-color: rgba(239, 71, 111, 0.2);
+            color: var(--danger);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            padding: 6px 10px;
+            border-radius: var(--border-radius);
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+
+        .action-btn.edit {
+            background-color: rgba(67, 97, 238, 0.1);
+            color: var(--primary);
+        }
+
+        .action-btn.edit:hover {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .action-btn.delete {
+            background-color: rgba(239, 71, 111, 0.1);
+            color: var(--danger);
+        }
+
+        .action-btn.delete:hover {
+            background-color: var(--danger);
+            color: white;
+        }
+.folder-item.active-folder {
+    background: rgba(0, 123, 255, 0.1);
+    border-left: 3px solid #007bff;
+}
+
+        .progress-report {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .download-btn {
+            margin-top: 15px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 0;
+            color: var(--gray);
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        .toggle-arrow {
+            margin-right: 8px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .toggle-arrow.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .subfolder-container {
+            margin-left: 20px;
+            display: block;
+            border-left: 2px solid rgba(255, 255, 255, 0.2);
+            padding-left: 10px;
+        }
+
+        .subfolder-container.collapsed {
+            display: none;
+        }
+
+        .settings-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--gray);
+            margin-left: 15px;
+        }
+
+        /* Settings Page Styles */
+        .settings-container {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+        }
+
+        .settings-section {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--light-gray);
+        }
+
+        .settings-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+.folder-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 5px 0;
+    padding: 5px;
+    border-bottom: 1px solid #ccc;
+}
+
+.folder-actions button {
+    margin-left: 5px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+}
+.folder-actions button:hover {
+    color: red;
+}
+
+        .settings-title {
+            font-size: 1.3rem;
+            color: var(--primary);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .settings-title i {
+            margin-right: 10px;
+            font-style: normal;
+        }
+
+        .settings-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: var(--border-radius);
+            background-color: var(--light);
+            transition: var(--transition);
+        }
+
+        .settings-option:hover {
+            background-color: var(--light-gray);
+        }
+
+        .option-label {
+            flex: 1;
+        }
+
+        .option-label h4 {
+            margin-bottom: 5px;
+            color: var(--dark);
+        }
+
+        .option-label p {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .option-control {
+            margin-left: 15px;
+        }
+
+        .danger-zone {
+            background-color: #feeaea;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin-top: 30px;
+        }
+
+        .danger-zone .settings-title {
+            color: var(--danger);
+        }
+
+        .back-btn {
+            margin-bottom: 20px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .back-btn i {
+            margin-right: 8px;
+        }
+
+        /* Folder UI Improvements */
+        .folder-input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .folder-input-container input {
+            flex: 1;
+        }
+
+        .folder-hierarchy {
+            margin-left: 15px;
+            border-left: 2px solid rgba(255, 255, 255, 0.2);
+            padding-left: 10px;
+        }
+
+        .folder-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .folder-main-content {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            min-width: 0; /* Allows text truncation */
+        }
+
+        .folder-actions button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 4px;
+            font-size: 14px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .folder-actions button:hover {
+            opacity: 1;
+        }
+
+        .no-folders-message {
+            text-align: center;
+            padding: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-style: italic;
+        }
+
+        /* Tree structure styles */
+        .folder-tree {
+            padding-left: 0;
+        }
+
+        .folder-tree-item {
+            margin-bottom: 5px;
+        }
+
+        .folder-tree-content {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .folder-tree-content:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .folder-tree-children {
+            margin-left: 25px;
+            padding-left: 15px;
+            border-left: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .folder-tree-actions {
+            display: flex;
+            gap: 5px;
+            margin-left: auto;
+        }
+
+        .folder-tree-actions button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 4px;
+            font-size: 14px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .folder-tree-actions button:hover {
+            opacity: 1;
+        }
+
+        .folder-select {
+            margin-bottom: 15px;
+            width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                order: 2;
+            }
+            
+            .main-content {
+                order: 1;
+            }
+            
+            .stats-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .folder-actions {
+                flex-direction: column;
+                gap: 3px;
+            }
+            
+            .content-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .theme-switch {
+                align-self: flex-end;
+            }
+
+            .settings-option {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .option-control {
+                margin-left: 0;
+                margin-top: 10px;
+                width: 100%;
+            }
+
+            .folder-input-container {
+                flex-direction: column;
+            }
+
+            .folder-tree-children {
+                margin-left: 15px;
+            }
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            color: var(--primary);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--gray);
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        body.dark-theme .modal-content {
+            background-color: #343a40;
+            color: #f8f9fa;
+        }
+
+        body.dark-theme .modal-title {
+            color: var(--primary);
+        }
+    </style>
+        <script>
+// API Configuration - Make sure this points to port 3000
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+    ? 'http://localhost:3000'  // This should be port 3000 since your server is running there
+    : 'https://mymarktrackerbackend.onrender.com'; // Replace with your Render URL when deployed
+
+// API Request Function
+// Modify your apiRequest function to handle errors better
+async function apiRequest(endpoint, options = {}) {
+    const url = `${API_BASE_URL}${endpoint}`;
+    const token = localStorage.getItem('authToken');
+    
+    const config = {
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers,
+        },
+        ...options,
+    };
+
+    // Add authorization header if token exists
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    if (config.body && typeof config.body === 'object') {
+        config.body = JSON.stringify(config.body);
+    }
+
+    try {
+        const response = await fetch(url, config);
+        
+        // Check if response is unauthorized
+        if (response.status === 401) {
+            localStorage.removeItem('authToken');
+            showPage('login-page');
+            throw new Error('Session expired. Please login again.');
+        }
+        
+        // Handle non-JSON responses
+        const contentType = response.headers.get('content-type');
+        let data;
+        
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            data = await response.text();
+            console.warn('Non-JSON response received:', data);
+        }
+
+        if (!response.ok) {
+            throw new Error(data.message || data.error || `Server error: ${response.status}`);
+        }
+
+        return data;
+    } catch (error) {
+        console.error('API request failed:', error);
+        throw error;
+    }
+}
+
+// Auth API functions
+// Update authAPI functions
+const authAPI = {
+    signup: async (username, password) => 
+        await apiRequest('/api/signup', {
+            method: 'POST',
+            body: { username, password },
+        }),
+
+    login: async (username, password) => 
+        await apiRequest('/api/login', {
+            method: 'POST',
+            body: { username, password },
+        }),
+
+    changeUsername: async (username, password) => 
+        await apiRequest('/api/user/username', {
+            method: 'PUT',
+            body: { username, password },
+        }),
+
+    changePassword: async (currentPassword, newPassword) => 
+        await apiRequest('/api/user/password', {
+            method: 'PUT',
+            body: { currentPassword, newPassword },
+        }),
+
+    deleteAccount: async () => 
+        await apiRequest('/api/user', {
+            method: 'DELETE',
+        }),
+};
+async function refreshToken() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/refresh-token`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('authToken', data.token);
+            return true;
+        }
+    } catch (error) {
+        console.error('Token refresh failed:', error);
+    }
+    return false;
+}
+// Data API functions
+const dataAPI = {
+    getUserData: async () => await apiRequest('/api/user'),
+    
+    saveUserData: async (folders) => 
+        await apiRequest('/api/user/data', {
+            method: 'POST',
+            body: { folders },
+        }),
+    createMark: async (folderId, mark) =>
+    await apiRequest(`/api/folders/${folderId}/marks`, {
+        method: 'POST',
+        body: mark,
+    }),
+
+    createFolder: async (name, parentId = null) => 
+        await apiRequest('/api/folders', {
+            method: 'POST',
+            body: { name, parentId },
+        }),
+    
+    deleteFolder: async (folderId) => 
+        await apiRequest(`/api/folders/${folderId}`, {
+            method: 'DELETE',
+        }),
+    updateFolder: async (folderId, updates) =>
+    await apiRequest(`/api/folders/${folderId}`, {
+        method: 'PUT',
+        body: updates,
+    }),
+
+    addMarks: async (folderId, marksData) => 
+        await apiRequest(`/api/folders/${folderId}/marks`, {
+            method: 'POST',
+            body: marksData,
+        }),
+    
+    updateMarks: async (folderId, markId, marksData) => 
+        await apiRequest(`/api/folders/${folderId}/marks/${markId}`, {
+            method: 'PUT',
+            body: marksData,
+        }),
+    
+    deleteMarks: async (folderId, markId) => 
+        await apiRequest(`/api/folders/${folderId}/marks/${markId}`, {
+            method: 'DELETE',
+        }),
+
+    clearAllData: async () => 
+        await apiRequest('/api/clear-data', {
+            method: 'DELETE',
+        }),
+};
+</script>
+    </head>
+    <body>
+        <div class="api-status" id="api-status">Checking API connection...
+            <button id="retry-api-btn" style="display: none; margin-left: 10px;">Retry</button>
+        </div>
+        
+
+        <!-- Modals -->
+        <div class="modal" id="username-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">Change Username</h3>
+                    <button class="modal-close"
+                        data-modal="username-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="new-username">New Username</label>
+                        <input type="text" id="new-username"
+                            class="form-control"
+                            placeholder="Enter new username">
+                    </div>
+                    <div class="form-group">
+                        <label for="username-password">Current Password</label>
+                        <input type="password" id="username-password"
+                            class="form-control"
+                            placeholder="Enter your password">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-warning"
+                        data-modal="username-modal">Cancel</button>
+                    <button class="btn btn-success" id="save-username-btn">Save
+                        Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" id="password-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">Change Password</h3>
+                    <button class="modal-close"
+                        data-modal="password-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="current-password">Current Password</label>
+                        <input type="password" id="current-password"
+                            class="form-control"
+                            placeholder="Enter current password">
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password">New Password</label>
+                        <input type="password" id="new-password"
+                            class="form-control"
+                            placeholder="Enter new password">
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-new-password">Confirm New
+                            Password</label>
+                        <input type="password" id="confirm-new-password"
+                            class="form-control"
+                            placeholder="Confirm new password">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-warning"
+                        data-modal="password-modal">Cancel</button>
+                    <button class="btn btn-success" id="save-password-btn">Save
+                        Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <!-- Signup Page -->
+            <div class="page active" id="signup-page">
+                <div class="header">
+                    <h1>Create Account</h1>
+                    <p>Sign up to start using Marks Explorer</p>
+                </div>
+
+                <div class="alert alert-error" id="signup-error"
+                    style="display: none;"></div>
+
+                <div class="form-group">
+                    <label for="signup-username">Username</label>
+                    <input type="text" id="signup-username" class="form-control"
+                        placeholder="Enter your username">
+                </div>
+
+                <div class="form-group">
+                    <label for="signup-password">Password</label>
+                    <div class="password-container">
+                        <input type="password" id="signup-password"
+                            class="form-control"
+                            placeholder="Create a strong password">
+                        <button type="button"
+                            class="toggle-password">👁️</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="signup-confirm">Confirm Password</label>
+                    <input type="password" id="signup-confirm"
+                        class="form-control"
+                        placeholder="Confirm your password">
+                </div>
+
+                <button class="btn btn-block" id="signup-btn">Sign Up</button>
+
+                <p style="margin-top: 20px;">
+                    Already have an account? <a href="#" class="link"
+                        id="login-link">Login</a>
+                </p>
+            </div>
+
+            <!-- Login Page -->
+            <div class="page" id="login-page">
+                <div class="header">
+                    <h1>Welcome Back</h1>
+                    <p>Sign in to access your marks</p>
+                </div>
+
+                <div class="alert alert-error" id="login-error"
+                    style="display: none;"></div>
+
+                <div class="form-group">
+                    <label for="login-username">Username</label>
+                    <input type="text" id="login-username" class="form-control"
+                        placeholder="Enter your username">
+                </div>
+
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <div class="password-container">
+                        <input type="password" id="login-password"
+                            class="form-control"
+                            placeholder="Enter your password">
+                        <button type="button"
+                            class="toggle-password">👁️</button>
+                    </div>
+                </div>
+
+                <button class="btn btn-block" id="login-btn">Login</button>
+
+                <p style="margin-top: 20px;">
+                    Don't have an account? <a href="#" class="link"
+                        id="signup-link">Sign Up</a>
+                </p>
+            </div>
+            <!-- Add Marks Modal -->
+
+            <!-- Main App Page -->
+            <div class="page" id="app-page">
+                <div class="app-container">
+                    <div class="sidebar">
+                        <div class="user-info">
+                            <div class="user-avatar" id="user-avatar">U</div>
+                            <div class="user-details">
+                                <div class="user-name"
+                                    id="user-name">Username</div>
+                                <div class="user-role">Student</div>
+                            </div>
+                        </div>
+
+
+
+                        <div class="nav-section">
+                            <div class="nav-title">Folders</div>
+                            <div class="folder-input-container">
+                                <input type="text" id="folderName"
+                                    class="form-control"
+                                    placeholder="Folder name">
+                                <button class="btn btn-success"
+                                    id="create-folder-btn">Add</button>
+                            </div>
+                            <div id="folders-list" class="folders-container"></div>
+
+                            <div class="folder-structure" id="folder-list">
+                                <!-- Folders will be dynamically added here -->
+                            </div>
+                        </div>
+
+                        <div class="nav-section">
+                            <div class="nav-title">Overall Performance</div>
+                            <div class="stat-card"
+                                style="background: rgba(255,255,255,0.1); color: white;">
+                                <div class="stat-label">Average Percentage</div>
+                                <div class="stat-value"
+                                    id="overall-percentage">0%</div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-danger btn-block" id="logout-btn"
+                            style="margin-top: auto;">Logout</button>
+                    </div>
+
+                    <div class="main-content">
+                        <div class="content-header">
+                            <h2>Marks Dashboard</h2>
+                            <button class="settings-btn"
+                                id="settings-btn">⚙️</button>
+                        </div>
+
+                        <div class="stats-cards">
+                            <div class="stat-card">
+                                <div class="stat-label">Total Subjects</div>
+                                <div class="stat-value"
+                                    id="total-subjects">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Highest Percentage</div>
+                                <div class="stat-value"
+                                    id="highest-percentage">0%</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Lowest Percentage</div>
+                                <div class="stat-value"
+                                    id="lowest-percentage">0%</div>
+                            </div>
+                        </div>
+<div class="stat-card">
+    <div class="stat-label">Total Marks</div>
+    <div class="stat-value" id="total-marks-card">0</div>
+</div>
+<div class="stat-card">
+    <div class="stat-label">Obtained Marks</div>
+    <div class="stat-value" id="obtained-marks-card">0</div>
+</div>
+
+                        <div class="marks-form">
+                            <h3 class="form-title">Add New Marks</h3>
+                            <div class="form-group">
+                                <label for="current-folder">Current
+                                    Folder</label>
+                                <select id="marks-folder"
+                                    class="form-control">
+                                    <option value>Select a folder</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="subject">Subject</label>
+                                    <input type="text" id="subject"
+                                        class="form-control"
+                                        placeholder="Subject name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="marks-obtained">Marks
+                                        Obtained</label>
+                                    <input type="number" id="marks-obtained"
+                                        class="form-control"
+                                        placeholder="Marks obtained">
+                                </div>
+                                <div class="form-group">
+                                    <label for="total-marks">Total Marks</label>
+                                    <input type="number" id="total-marks"
+                                        class="form-control"
+                                        placeholder="Total marks">
+                                </div>
+                                <div class="form-group">
+                                    <label for="marks-date">Date</label>
+                                    <input type="date" id="marks-date"
+                                        class="form-control"
+                                        value="<?php echo date('Y-m-d'); ?>">
+                                </div>
+                            </div>
+                            <button class="btn btn-block" id="add-marks-btn">Add
+                                Marks</button> </div>
+
+                        <div class="marks-list">
+                            <h3 class="form-title">Marks List</h3>
+                            <div class="form-group">
+                                <select id="folder-select"
+                                    class="form-control folder-select">
+                                    <option value="all">All Folders</option>
+                                </select>
+                            </div>
+                            <div id="marks-table-container">
+                                <table class="marks-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Subject</th>
+                                            <th>Marks Obtained</th>
+                                            <th>Total Marks</th>
+                                            <th>Percentage</th>
+                                            <th>Date</th>
+
+                                            <th>Folder</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="marks-table-body">
+                                        <!-- Marks will be dynamically added here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="empty-state" id="empty-marks"
+                                style="display: none;">
+                                <div>📝</div>
+                                <p>No marks added yet. Add your first marks to
+                                    get started!</p>
+                            </div>
+                        </div>
+
+                        <div class="progress-report">
+                            <h3 class="form-title">Progress Report</h3>
+                            <div class="chart-container">
+                                <canvas id="progress-chart"></canvas>
+                            </div>
+                            <button class="btn btn-info download-btn"
+                                id="download-report-btn">Download
+                                Report</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+<div class="settings-section">
+    <h3 class="settings-title"><i>📚</i> Manage Subjects</h3>
+    <div class="subject-input-container">
+        <input type="text" id="new-subject" class="form-control" placeholder="Enter subject name">
+        <button class="btn btn-success" id="add-subject-btn">Add Subject</button>
+    </div>
+    <div id="subjects-list" class="subjects-list">
+        <!-- Subjects will be added here dynamically -->
+    </div>
+</div>
+            <!-- Settings Page -->
+            <div class="page" id="settings-page">
+                <button class="btn btn-warning back-btn" id="back-btn">
+                    <i>←</i> Back to Dashboard
+                </button>
+
+                <div class="header">
+                    <h1>Settings</h1>
+                    <p>Manage your account preferences</p>
+                </div>
+
+                <div class="settings-container">
+                    <div class="settings-section">
+                        <h3 class="settings-title"><i>👤</i> Account
+                            Settings</h3>
+
+                        <div class="settings-option">
+                            <div class="option-label">
+                                <h4>Change Username</h4>
+                                <p>Update your account username</p>
+                            </div>
+                            <div class="option-control">
+                                <button class="btn"
+                                    id="change-username-btn">Change</button>
+                            </div>
+                        </div>
+
+                        <div class="settings-option">
+                            <div class="option-label">
+                                <h4>Change Password</h4>
+                                <p>Update your account password</p>
+                            </div>
+                            <div class="option-control">
+                                <button class="btn"
+                                    id="change-password-btn">Change</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3 class="settings-title"><i>🎨</i> Appearance</h3>
+
+                        <div class="settings-option">
+                            <div class="option-label">
+                                <h4>Dark Mode</h4>
+                                <p>Toggle dark mode for better night viewing</p>
+                            </div>
+                            <div class="option-control">
+                                <label class="theme-switch">
+                                    <span class="theme-switch-text">Light</span>
+                                    <div class="switch">
+                                        <input type="checkbox"
+                                            id="theme-switch">
+                                        <span class="slider"></span>
+                                    </div>
+                                    <span class="theme-switch-text">Dark</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <h3 class="settings-title"><i>📊</i> Chart Settings</h3>
+
+                    <div class="settings-option">
+                        <div class="option-label">
+                            <h4>Chart Type</h4>
+                            <p>Select how you want to view your progress</p>
+                        </div>
+                        <div class="option-control">
+                            <select id="chart-type-select" class="form-control">
+                                <option value="bar">Bar</option>
+                                <option value="line">Line</option>
+                                <option value="pie">Pie</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="radar">Radar</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h3 class="settings-title"><i>📁</i> Data
+                            Management</h3>
+
+                        <div class="settings-option">
+                            <div class="option-label">
+                                <h4>Export Data</h4>
+                                <p>Download all your data as a JSON file</p>
+                            </div>
+                            <div class="option-control">
+                                <button class="btn btn-info"
+                                    id="export-data-btn">Export Data</button>
+                            </div>
+                        </div>
+
+                        <div class="settings-option">
+                            <div class="option-label">
+                                <h4>Import Data</h4>
+                                <p>Upload data from a JSON file</p>
+                            </div>
+                            <div class="option-control">
+                                <input type="file" id="import-file"
+                                    accept=".json" style="display: none;">
+                                <button class="btn btn-info"
+                                    id="import-data-btn">Import Data</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="danger-zone">
+                        <h3 class="settings-title"><i>⚠️</i> Danger Zone</h3>
+
+                        <div class="settings-option">
+                            <div class="option-label">
+                                <h4>Clear All Data</h4>
+                                <p>Permanently delete all your marks and
+                                    folders</p>
+                            </div>
+                            <div class="option-control">
+                                <button class="btn btn-danger"
+                                    id="clear-data-btn">Clear Data</button>
+                            </div>
+                        </div>
+
+                        <div class="settings-option">
+                            <div class="option-label">
+                                <h4>Delete Account</h4>
+                                <p>Permanently delete your account and all
+                                    data</p>
+                            </div>
+                            <div class="option-control">
+                                <button class="btn btn-danger"
+                                    id="delete-account-btn">Delete
+                                    Account</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Add this modal before closing body tag -->
+<div class="modal" id="round-selection-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Select Rounds for Chart</h3>
+            <button class="modal-close" data-modal="round-selection-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="round-selection-list">
+                <!-- Rounds will be added here dynamically -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-warning" data-modal="round-selection-modal">Cancel</button>
+            <button class="btn btn-success" id="generate-chart-btn">Generate Chart</button>
+        </div>
+    </div>
+</div>
+
+        <script>
+    let chartType = localStorage.getItem('chartType') || 'bar';
+
+// State management
+let currentUser = null;
+let folders = [];
+let marks = [];
+let selectedFolderId = null;
+let chart = null;
+
+// DOM Elements
+const apiStatusElement = document.getElementById('api-status');
+
+// Check API connection
+// ===============================
+// 🌐 CHECK API CONNECTION
+// ===============================
+// ===============================
+// 🌐 CHECK API CONNECTION (FIXED)
+// ===============================
+async function checkApiConnection() {
+    try {
+        const token = localStorage.getItem("authToken");
+        apiStatusElement.textContent = "Checking API connection...";
+        apiStatusElement.className = "api-status";
+
+        // If no token, just show ready status
+        if (!token) {
+            apiStatusElement.textContent = "API Ready (Login required)";
+            apiStatusElement.className = "api-status disconnected";
+            return;
+        }
+
+        // Test API connection with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+        const response = await fetch(`${API_BASE_URL}/api/user`, {
+            headers: { "Authorization": `Bearer ${token}` },
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+            apiStatusElement.textContent = "API Connected";
+            apiStatusElement.className = "api-status connected";
+        } else if (response.status === 401 || response.status === 403) {
+            // Token is invalid or expired
+            localStorage.removeItem("authToken");
+            apiStatusElement.textContent = "Session expired. Please login again.";
+            apiStatusElement.className = "api-status disconnected";
+            showPage("login-page");
+        } else {
+            throw new Error(`API responded with ${response.status}`);
+        }
+    } catch (error) {
+    console.warn("API connection check failed:", error.message);
+    
+    if (error.name === 'AbortError') {
+        apiStatusElement.textContent = "API Timeout - Using local storage";
+    } else {
+        apiStatusElement.textContent = "API Disconnected - Using local storage";
+    }
+    
+    apiStatusElement.className = "api-status disconnected";
+    
+    // Show retry button
+    const retryBtn = document.getElementById('retry-api-btn');
+    if (retryBtn) retryBtn.style.display = 'inline-block';
+    
+    // Fall back to local data if available
+    if (localStorage.getItem('localBackupData')) {
+        try {
+            const localData = JSON.parse(localStorage.getItem('localBackupData'));
+            folders = localData.folders || [];
+            marks = localData.marks || [];
+            renderFolders();
+            renderMarksTable();
+            updateStats();
+            renderChart();
+        } catch (e) {
+            console.error("Failed to load local backup:", e);
+        }
+    }
+}
+}
+
+
+// Initialize the app
+// Initialize the app when the DOM is loaded
+// ===============================
+// 🚀 INIT APP (safe version)
+// ===============================
+function initApp() {
+    // Load theme preference first
+    loadThemePreference();
+    
+    // Setup password toggles
+    setupPasswordToggles();
+        renderSubjects();
+
+    // Restore chart type preference
+    const chartSelect = document.getElementById("chart-type-select");
+    if (chartSelect) {
+        chartSelect.value = chartType;
+    }
+    
+    // Check authentication status
+    const token = localStorage.getItem("authToken");
+    if (token) {
+        loadUserData()
+            .then(() => checkApiConnection())
+            .catch(err => {
+                console.error("Auto-login failed:", err.message);
+                localStorage.removeItem("authToken");
+                showPage("login-page");
+                checkApiConnection();
+            });
+    } else {
+        showPage("login-page");
+        checkApiConnection();
+    }
+    
+    // SETUP EVENT LISTENERS AFTER DOM IS READY
+    // Use setTimeout to ensure DOM is fully parsed
+    setTimeout(() => {
+        setupEventListeners();
+    }, 0);
+}
+
+// Start the app when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
+}
+
+function exportData() {
+  const data = { folders, marks, currentUser };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "marks_data.json";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// ===============================
+// 📥 IMPORT DATA
+// ===============================
+function handleImportData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+
+      // Overwrite local state
+      folders = imported.folders || [];
+      marks = imported.marks || [];
+      currentUser = imported.currentUser || currentUser;
+
+      // Re-render UI
+      renderFolders();
+      renderMarksTable();
+      updateStats();
+      renderChart();
+
+      alert("✅ Data imported successfully!");
+    } catch (err) {
+      console.error("Error importing data:", err);
+      alert("❌ Failed to import data. Invalid file format.");
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Add this to functions that modify data:
+function backupDataLocally() {
+    const backupData = {
+        folders: folders,
+        marks: marks,
+        timestamp: new Date().toISOString()
+    };
+    localStorage.setItem('localBackupData', JSON.stringify(backupData));
+}
+
+// Call backupDataLocally() after any data modification
+// Event Listeners
+function setupEventListeners() {
+    document.getElementById('retry-api-btn')?.addEventListener('click', checkApiConnection);
+
+  // ---------------- Auth navigation ----------------
+  document.getElementById('login-link')?.addEventListener('click', () => showPage('login-page'));
+  document.getElementById('signup-link')?.addEventListener('click', () => showPage('signup-page'));
+
+  // ---------------- Auth actions ----------------
+  document.getElementById('signup-btn')?.addEventListener('click', handleSignup);
+  document.getElementById('login-btn')?.addEventListener('click', handleLogin);
+  document.getElementById('logout-btn')?.addEventListener('click', handleLogout);
+document.getElementById('add-subject-btn')?.addEventListener('click', addSubject);
+
+  // ---------------- Folder actions ----------------
+  document.getElementById('create-folder-btn')?.addEventListener('click', createFolder);
+
+  // ---------------- Marks actions ----------------
+  document.getElementById('add-marks-btn')?.addEventListener('click', addMarks);
+  document.getElementById('folder-select')?.addEventListener('change', filterMarksByFolder);
+
+  // ---------------- Settings actions ----------------
+  document.getElementById('settings-btn')?.addEventListener('click', () => showPage('settings-page'));
+  document.getElementById('back-btn')?.addEventListener('click', () => showPage('app-page'));
+  document.getElementById('change-username-btn')?.addEventListener('click', () => showModal('username-modal'));
+  document.getElementById('change-password-btn')?.addEventListener('click', () => showModal('password-modal'));
+  document.getElementById('save-username-btn')?.addEventListener('click', changeUsername);
+  document.getElementById('save-password-btn')?.addEventListener('click', changePassword);
+  document.getElementById('clear-data-btn')?.addEventListener('click', clearAllData);
+  document.getElementById('delete-account-btn')?.addEventListener('click', deleteAccount);
+
+  // ---------------- Theme toggle ----------------
+  document.getElementById('theme-switch')?.addEventListener('change', toggleTheme);
+
+  // ---------------- Report download ----------------
+  document.getElementById('download-report-btn')?.addEventListener('click', downloadReport);
+
+  // ---------------- Import / Export ----------------
+  document.getElementById('export-data-btn')?.addEventListener('click', exportData);
+  document.getElementById('import-data-btn')?.addEventListener('click', () => {
+    document.getElementById('import-file').click();
+  });
+  document.getElementById('import-file')?.addEventListener('change', handleImportData);
+
+  // ---------------- Modal close buttons ----------------
+  document.querySelectorAll('.modal-close').forEach(button => {
+    button.addEventListener('click', () => {
+      const modalId = button.getAttribute('data-modal');
+      hideModal(modalId);
+    });
+  });
+
+  
+  // ---------------- Chart type selection ----------------
+  document.getElementById('chart-type-select')?.addEventListener('change', (e) => {
+    chartType = e.target.value;
+    localStorage.setItem('chartType', chartType);
+    renderChart();
+  });
+
+  // ---------------- Setup password toggles ----------------
+  setupPasswordToggles();
+}
+
+
+
+document.addEventListener("DOMContentLoaded", setupEventListeners);
+
+
+// Run after DOM is fully loaded
+document.addEventListener("DOMContentLoaded", () => {
+    setupEventListeners();
+});
+
+
+
+// Authentication functions
+// ===============================
+// 🆕 HANDLE SIGNUP
+// ===============================
+async function handleSignup() {
+    const username = document.getElementById('signup-username').value.trim();
+    const password = document.getElementById('signup-password').value.trim();
+    const confirmPassword = document.getElementById('signup-confirm').value.trim();
+
+    if (!username || !password) {
+        showError('signup-error', 'Please fill in all fields');
+        return;
+    }
+
+    if (password !== confirmPassword) {
+        showError('signup-error', 'Passwords do not match');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/signup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Signup failed");
+
+        // 🔹 Save real token from backend
+        localStorage.setItem("authToken", data.token);
+
+        currentUser = data.user;
+        showPage("app-page");
+        await loadUserData();
+
+    } catch (error) {   
+        console.error("Signup error:", error);
+        showError("signup-error", error.message || "Signup failed. Please try again.");
+    }
+}
+
+// ===============================
+// 🔑 HANDLE LOGIN
+// ===============================
+// ===============================
+// 🔑 HANDLE LOGIN
+// ===============================
+// ===============================
+// 🔑 HANDLE LOGIN
+// ===============================
+async function handleLogin(event) {
+    event.preventDefault();
+
+    const username = document.getElementById("login-username").value.trim();
+    const password = document.getElementById("login-password").value.trim();
+
+    if (!username || !password) {
+        showError("login-error", "Please enter both username and password");
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Login failed");
+
+        // 🔹 Save real token from backend
+        localStorage.setItem("authToken", data.token);
+
+        currentUser = data.user;
+        showPage("app-page");
+        await loadUserData();
+
+    } catch (error) {
+        console.error("Login error:", error);
+        showError("login-error", error.message || "Login failed. Please try again.");
+    }
+}
+
+
+
+
+// ✅ Fixed createFolder function
+// ===============================
+// 📂 CREATE NEW FOLDER
+// ===============================
+async function createFolder() {
+    const name = document.getElementById("folderName").value.trim();
+    if (!name) return;
+
+    try {
+        const result = await dataAPI.createFolder(name);
+        const newFolder = result.folder;
+
+        folders.push(newFolder);    // add to local state
+        renderFolders();            // re-render folder list in sidebar
+        updateFolderDropdown();     // 🔥 update dropdown immediately
+
+        document.getElementById("folderName").value = ""; // clear input
+    } catch (err) {
+        console.error("Error creating folder:", err);
+        alert("Failed to create folder: " + err.message);
+    }
+}
+
+
+
+
+
+function handleLogout() {
+    localStorage.removeItem('authToken');
+    currentUser = null;
+    folders = [];
+    marks = [];
+    showPage('login-page');
+    clearUI();
+}
+
+// Replace the checkAuthStatus function with this:
+function checkAuthStatus() {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+        // Instead of loginWithToken, verify token by making a simple API request
+        dataAPI.getUserData()
+            .then(userData => {
+                // If we get user data successfully, the token is valid
+                currentUser = { username: userData.username || 'User' }; // Adjust based on your API response
+                showPage('app-page');
+                loadUserData();
+            })
+            .catch(() => {
+                localStorage.removeItem('authToken');
+                showPage('login-page');
+            });
+    } else {
+        showPage('signup-page');
+    }
+}
+
+// Folder functions
+// Replace the createFolder function with this:
+async function createFolder() {
+  const folderNameInput = document.getElementById('folderName');
+  const name = folderNameInput ? folderNameInput.value.trim() : '';
+  if (!name) { alert('Please enter a folder name'); return; }
+
+  try {
+    const res = await dataAPI.createFolder(name);
+    // server should return { folder: {...} } — but reload to be safe
+    await loadUserData();
+
+    // if server returned folder id, auto-select it in marks form
+    if (res && res.folder && document.getElementById('marks-folder')) {
+      document.getElementById('marks-folder').value = res.folder.id;
+    }
+
+    folderNameInput.value = '';
+  } catch (err) {
+    console.error('Error creating folder:', err);
+    alert('Error creating folder: ' + (err.message || err));
+  }
+}
+
+function checkToken() {
+    const token = localStorage.getItem('authToken');
+    console.log('Token exists:', !!token);
+    if (token) {
+        console.log('Token length:', token.length);
+        console.log('Token content (first 50 chars):', token.substring(0, 50));
+    }
+}
+
+// Call this after login to verify token is stored
+checkToken();
+
+
+// Replace the createSubfolder function with this:
+
+
+
+
+
+
+
+
+
+async function deleteFolder(folderId) {
+    if (!confirm("Delete this folder?")) return;
+    await dataAPI.deleteFolder(folderId);
+    await loadUserData();
+}
+
+function editFolder(folderId) {
+    const folder = findFolderById(folderId, folders);
+    if (!folder) return;
+
+    const newName = prompt("Enter new folder name:", folder.name);
+    if (!newName) return;
+
+    dataAPI.updateFolder(folderId, { name: newName })
+        .then(() => loadUserData())
+        .catch(err => console.error("❌ Error editing folder:", err));
+}
+
+// Recursive helper to find a folder by ID
+// Helper function to find folder by ID with better error handling
+function findFolderById(id, list = folders) {
+  if (!id || !list) return null;
+  
+  for (const folder of list) {
+    if (folder.id === id) return folder;
+    
+    // Recursively search in subfolders
+    if (folder.subfolders && folder.subfolders.length > 0) {
+      const found = findFolderById(id, folder.subfolders);
+      if (found) return found;
+    }
+  }
+  
+  return null;
+}
+
+
+// Helper function to collect all marks from folders and subfolders
+function collectAllMarks(folderList) {
+  const out = [];
+  
+  if (!folderList || !Array.isArray(folderList)) return out;
+
+  function recurse(list) {
+    for (const folder of list) {
+      // If this folder has marks, process them
+      if (Array.isArray(folder.marks)) {
+        folder.marks.forEach(mark => {
+          // Ensure every mark has its folderId and folderName
+          if (!mark.folderId) mark.folderId = folder.id;
+          if (!mark.folderName) mark.folderName = folder.name;
+          out.push(mark);
+        });
+      }
+
+      // If this folder has subfolders, recurse
+      if (folder.subfolders && folder.subfolders.length) {
+        recurse(folder.subfolders);
+      }
+    }
+  }
+
+  recurse(folderList);
+  return out;
+}
+
+// Marks functions
+
+
+function editMarks(markId) {
+    const mark = marks.find(m => m.id === markId);
+    if (!mark) return;
+    
+    const newSubject = prompt('Enter new subject name:', mark.subject);
+    if (!newSubject) return;
+    
+    const newMarksObtained = parseFloat(prompt('Enter new marks obtained:', mark.marksObtained));
+    if (isNaN(newMarksObtained)) return;
+    
+    const newTotalMarks = parseFloat(prompt('Enter new total marks:', mark.totalMarks));
+    if (isNaN(newTotalMarks)) return;
+    
+    const newDate = prompt('Enter new date (YYYY-MM-DD):', mark.date);
+    if (!newDate) return;
+    
+    if (newMarksObtained > newTotalMarks) {
+        alert('Marks obtained cannot be greater than total marks');
+        return;
+    }
+    
+    dataAPI.updateMarks(mark.folderId, markId, {
+        subject: newSubject,
+        marksObtained: newMarksObtained,
+        totalMarks: newTotalMarks,
+        date: newDate
+    })
+    .then(updatedMark => {
+        const index = marks.findIndex(m => m.id === markId);
+        if (index !== -1) {
+            marks[index] = updatedMark;
+        }
+        renderMarksTable();
+        updateStats();
+        renderChart();
+    })
+    .catch(error => {
+        alert('Error updating marks: ' + error.message);
+    });
+}
+
+// Get all marks belonging to a specific folder (and its subfolders)
+function getMarksFromFolder(folder) {
+  if (!folder) return [];
+
+  const out = [];
+
+  function recurse(f) {
+    if (Array.isArray(f.marks)) {
+      f.marks.forEach(m => {
+        if (!m.folderId) m.folderId = f.id;
+        out.push(m);
+      });
+    }
+    if (f.subfolders && f.subfolders.length) {
+      f.subfolders.forEach(recurse);
+    }
+  }
+
+  recurse(folder);
+  return out;
+}
+
+
+function deleteMarks(markId) {
+    if (!confirm('Are you sure you want to delete these marks?')) {
+        return;
+    }
+    
+    const mark = marks.find(m => m.id === markId);
+    if (!mark) return;
+    
+    dataAPI.deleteMarks(mark.folderId, markId)
+        .then(() => {
+            marks = marks.filter(m => m.id !== markId);
+            renderMarksTable();
+            updateStats();
+            renderChart();
+        })
+        .catch(error => {
+            alert('Error deleting marks: ' + error.message);
+        });
+}
+
+function filterMarksByFolder() {
+    const selectedFolderId = document.getElementById("folder-select").value;
+    renderMarksTable(selectedFolderId);
+}
+
+
+// Settings functions
+async function changeUsername() {
+    const newUsername = document.getElementById('new-username').value.trim();
+    const password = document.getElementById('username-password').value;
+
+    if (!newUsername || !password) {
+        alert('Please fill in all fields');
+        return;
+    }
+
+    try {
+        await authAPI.changeUsername(newUsername, password);
+        currentUser.username = newUsername;
+        document.getElementById('user-name').textContent = newUsername;
+        document.getElementById('user-avatar').textContent = newUsername.charAt(0).toUpperCase();
+        hideModal('username-modal');
+        
+        // Clear form
+        document.getElementById('new-username').value = '';
+        document.getElementById('username-password').value = '';
+        
+        alert('Username changed successfully!');
+    } catch (error) {
+        alert('Error changing username: ' + error.message);
+    }
+}
+
+async function changePassword() {
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmNewPassword = document.getElementById('confirm-new-password').value;
+
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+        alert('Please fill in all fields');
+        return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+        alert('New passwords do not match');
+        return;
+    }
+
+    try {
+        await authAPI.changePassword(currentPassword, newPassword);
+        hideModal('password-modal');
+        
+        // Clear form
+        document.getElementById('current-password').value = '';
+        document.getElementById('new-password').value = '';
+        document.getElementById('confirm-new-password').value = '';
+        
+        alert('Password changed successfully!');
+    } catch (error) {
+        alert('Error changing password: ' + error.message);
+    }
+}
+
+async function clearAllData() {
+    if (!confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        await dataAPI.clearAllData();
+        folders = [];
+        marks = [];
+        renderFolders();
+        renderMarksTable();
+        updateStats();
+        renderChart();
+        alert('All data has been cleared successfully!');
+    } catch (error) {
+        alert('Error clearing data: ' + error.message);
+    }
+}
+
+async function deleteAccount() {
+    if (!confirm('Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently lost.')) {
+        return;
+    }
+    
+    try {
+        await authAPI.deleteAccount();
+        handleLogout();
+        alert('Your account has been deleted successfully.');
+    } catch (error) {
+        alert('Error deleting account: ' + error.message);
+    }
+}
+
+// Replace the renderFolders function with this simplified version:
+// ===============================
+// 📂 RENDER FOLDERS IN SIDEBAR
+// ===============================
+// ===============================
+// 📂 RENDER FOLDERS IN SIDEBAR
+// ===============================
+// ===============================
+// 📂 RENDER FOLDERS IN SIDEBAR
+// ===============================
+    function renderFolders() {
+  const sidebar = document.getElementById('folders-list');
+  if (!sidebar) return;
+  sidebar.innerHTML = '';
+
+  if (!folders || !folders.length) {
+    sidebar.innerHTML = '<p class="no-folders-message">No folders available</p>';
+    return;
+  }
+
+  function render(folder, parentEl, level = 0) {
+    const item = document.createElement('div');
+    item.className = 'folder-item';
+    item.style.paddingLeft = `${level * 12}px`;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = folder.name;
+    item.appendChild(nameSpan);
+
+    const actions = document.createElement('div');
+    actions.className = 'folder-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'edit-folder';
+    editBtn.textContent = '✏️';
+    editBtn.addEventListener('click', (e) => { e.stopPropagation(); editFolder(folder.id); });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'delete-folder';
+    delBtn.textContent = '🗑️';
+    delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteFolder(folder.id); });
+
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+    item.appendChild(actions);
+
+    // click to select folder (for UI highlight if desired)
+    item.addEventListener('click', () => {
+      selectedFolderId = folder.id;
+      // optionally highlight; also select filter
+      const allFolderEls = sidebar.querySelectorAll('.folder-item');
+      allFolderEls.forEach(el => el.classList.remove('active-folder'));
+      item.classList.add('active-folder');
+      document.getElementById('folder-select').value = folder.id;
+      renderMarksTable(folder.id);
+    });
+
+    parentEl.appendChild(item);
+
+    if (folder.subfolders && folder.subfolders.length) {
+      folder.subfolders.forEach(sf => render(sf, parentEl, level + 1));
+    }
+  }
+
+  folders.forEach(f => render(f, sidebar, 0));
+}
+
+
+
+
+
+
+// helper for recursion
+function renderFoldersInto(folders, container) {
+    folders.forEach(folder => {
+        const div = document.createElement("div");
+        div.className = "folder-item";
+        div.textContent = folder.name || "Untitled Folder";
+
+        if (folder.marks && folder.marks.length > 0) {
+            const markInfo = document.createElement("span");
+            markInfo.textContent = ` (${folder.marks.length} marks)`;
+            div.appendChild(markInfo);
+        }
+
+        container.appendChild(div);
+
+        if (folder.subfolders && folder.subfolders.length > 0) {
+            const subDiv = document.createElement("div");
+            subDiv.className = "subfolders";
+            div.appendChild(subDiv);
+            renderFoldersInto(folder.subfolders, subDiv);
+        }
+    });
+}
+
+
+// UI Rendering functions
+function renderFolderRecursive(folder, container) {
+    const folderItem = document.createElement("div");
+    folderItem.classList.add("folder-tree-item");
+
+    // Folder row
+    const folderContent = document.createElement("div");
+    folderContent.classList.add("folder-tree-content");
+
+    // Arrow for expanding/collapsing
+    const toggleArrow = document.createElement("span");
+    toggleArrow.classList.add("toggle-arrow");
+    toggleArrow.textContent = folder.collapsed ? "▶" : "▼";
+
+    // ✅ contentSpan properly defined
+    const contentSpan = document.createElement("span");
+    contentSpan.classList.add("folder-name");
+    contentSpan.textContent = folder.name;
+
+    // Actions
+    const actions = document.createElement("div");
+    actions.classList.add("folder-tree-actions");
+
+    const addSubBtn = document.createElement("button");
+    addSubBtn.textContent = "+";
+    addSubBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        // ✅ Instead of showPopup, open your subfolder modal
+        const parentFolderSelect = document.getElementById('parent-folder');
+        parentFolderSelect.innerHTML = `<option value="">Select a parent folder</option>`;
+        
+        // Fill dropdown with existing folders
+        function addFoldersToDropdown(foldersArray, level = 0) {
+            foldersArray.forEach(f => {
+                const option = document.createElement('option');
+                option.value = f.id;
+                option.textContent = '→ '.repeat(level) + f.name;
+                parentFolderSelect.appendChild(option);
+
+                if (f.subfolders && f.subfolders.length > 0) {
+                    addFoldersToDropdown(f.subfolders, level + 1);
+                }
+            });
+        }
+        addFoldersToDropdown(folders);
+
+        // Pre-select the clicked folder
+        parentFolderSelect.value = folder.id;
+
+        showModal('subfolder-modal');
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "🗑️";
+    deleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteFolder(folder.id);
+    });
+
+    actions.appendChild(addSubBtn);
+    actions.appendChild(deleteBtn);
+
+    folderContent.appendChild(toggleArrow);
+    folderContent.appendChild(contentSpan);
+    folderContent.appendChild(actions);
+
+    folderItem.appendChild(folderContent);
+
+    // Children
+    if (folder.subfolders && folder.subfolders.length > 0) {
+        const childrenContainer = document.createElement("div");
+        childrenContainer.classList.add("folder-tree-children");
+        if (folder.collapsed) childrenContainer.style.display = "none";
+
+        folder.subfolders.forEach(sub => {
+            renderFolderRecursive(sub, childrenContainer);
+        });
+
+        folderItem.appendChild(childrenContainer);
+
+        toggleArrow.addEventListener("click", (e) => {
+            e.stopPropagation();
+            folder.collapsed = !folder.collapsed;
+            childrenContainer.style.display = folder.collapsed ? "none" : "block";
+            toggleArrow.textContent = folder.collapsed ? "▶" : "▼";
+        });
+    }
+
+    container.appendChild(folderItem);
+}
+
+// Marks functions
+// ✅ Add marks to database
+// Add marks from form to database
+async function addMarks() {
+  const folderId = document.getElementById('marks-folder').value;
+  const subject = document.getElementById('subject').value.trim();
+  const marksObtained = Number(document.getElementById('marks-obtained').value);
+  const totalMarks = Number(document.getElementById('total-marks').value);
+  const date = document.getElementById('marks-date').value || '';
+
+  if (!folderId || !subject || isNaN(marksObtained) || isNaN(totalMarks)) {
+    alert('Please fill all fields correctly.');
+    return;
+  }
+
+  try {
+    await dataAPI.addMarks(folderId, { subject, marksObtained, totalMarks, date });
+    // clear form
+    document.getElementById('subject').value = '';
+    document.getElementById('marks-obtained').value = '';
+    document.getElementById('total-marks').value = '';
+    // refresh everything from server (keeps server as source-of-truth)
+    await loadUserData();
+  } catch (err) {
+    console.error('Error adding marks:', err);
+    alert('Failed to add marks: ' + (err.message || err));
+  }
+}
+
+
+
+
+
+// Add this event listener to your setupEventListeners function
+document.getElementById('add-marks-btn').addEventListener('click', addMarks);
+
+
+
+
+
+function createFolderTreeNode(folder) {
+    const node = document.createElement('div');
+    node.className = 'folder-tree-item';
+    
+    const content = document.createElement('div');
+    content.className = 'folder-tree-content';
+    
+    // Toggle arrow for folders with children
+    const hasChildren = folders.some(f => f.parentId === folder.id);
+    if (hasChildren) {
+        const toggle = document.createElement('span');
+        toggle.className = 'toggle-arrow';
+        toggle.textContent = '▼';
+        toggle.addEventListener('click', () => {
+            const childrenContainer = node.querySelector('.folder-tree-children');
+            toggle.classList.toggle('collapsed');
+            childrenContainer.classList.toggle('collapsed');
+        });
+        content.appendChild(toggle);
+    } else {
+        // Add spacer for alignment
+        const spacer = document.createElement('span');
+        spacer.style.width = '15px';
+        spacer.style.display = 'inline-block';
+        content.appendChild(spacer);
+    }
+    
+    const folderIcon = document.createElement('span');
+    folderIcon.className = 'folder-icon';
+    folderIcon.textContent = '📁';
+    content.appendChild(folderIcon);
+    
+    const folderName = document.createElement('span');
+    folderName.className = 'folder-name';
+    folderName.textContent = folder.name;
+    folderName.title = folder.name;
+    content.appendChild(folderName);
+    
+    // Calculate folder percentage
+    const folderMarks = marks.filter(m => m.folderId === folder.id);
+    let folderPercentage = 0;
+    if (folderMarks.length > 0) {
+        const totalPercentage = folderMarks.reduce((sum, mark) => {
+            return sum + (mark.marksObtained / mark.totalMarks) * 100;
+        }, 0);
+        folderPercentage = totalPercentage / folderMarks.length;
+    }
+    
+    const percentageSpan = document.createElement('span');
+    percentageSpan.className = 'folder-percentage';
+    percentageSpan.textContent = folderMarks.length > 0 ? `${folderPercentage.toFixed(1)}%` : 'Empty';
+    content.appendChild(percentageSpan);
+    
+    // Folder actions
+    const actions = document.createElement('div');
+    actions.className = 'folder-tree-actions';
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '🗑️';
+    deleteBtn.title = 'Delete folder';
+    deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteFolder(folder.id);
+    };
+    actions.appendChild(deleteBtn);
+    
+    content.appendChild(actions);
+    node.appendChild(content);
+    
+    // Add children if any
+    const children = folders.filter(f => f.parentId === folder.id);
+    if (children.length > 0) {
+        const childrenContainer = document.createElement('div');
+        childrenContainer.className = 'folder-tree-children';
+        
+        children.forEach(child => {
+            childrenContainer.appendChild(createFolderTreeNode(child));
+        });
+        
+        node.appendChild(childrenContainer);
+    }
+    // Export data
+// --- Import / Export ---
+
+// ===============================
+// 📤 EXPORT DATA
+// ===============================
+
+
+
+
+
+
+// Add event listeners for import/export
+document.getElementById('export-data-btn').addEventListener('click', exportData);
+document.getElementById('import-data-btn').addEventListener('click', () => {
+    document.getElementById('import-file').click();
+});
+document.getElementById('import-file').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        if (confirm('Importing data will replace all your current data. Continue?')) {
+            handleImportData(e.target.files[0]);
+        }
+    }
+});
+    // Select folder on click
+    content.addEventListener('click', () => {
+        document.querySelectorAll('.folder-tree-content').forEach(el => {
+            el.style.backgroundColor = '';
+        });
+        content.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+        selectedFolderId = folder.id;
+        document.getElementById('current-folder').value = folder.id;
+    });
+    
+    return node;
+}
+
+// Toggle password visibility - MOVE THIS TO THE BOTTOM OF THE FILE
+// Setup password toggles
+// Setup password toggles - Alternative solution
+// ===============================
+// 👁️ PASSWORD TOGGLE
+// ===============================
+// ===============================
+// 👁️ PASSWORD TOGGLE
+// ===============================
+function setupPasswordToggles() {
+    document.querySelectorAll('.toggle-password').forEach(button => {
+        button.addEventListener('click', () => {
+            const input = button.parentElement.querySelector('input');
+            if (!input) return;
+
+            if (input.type === "password") {
+                input.type = "text";
+                button.textContent = "🙈";
+            } else {
+                input.type = "password";
+                button.textContent = "👁️";
+            }
+        });
+    });
+}
+
+function showRoundSelectionModal() {
+    const container = document.getElementById('round-selection-list');
+    container.innerHTML = '';
+    
+    folders.forEach(round => {
+        const div = document.createElement('div');
+        div.className = 'round-selection-item';
+        div.innerHTML = `
+            <input type="checkbox" id="round-${round.id}" value="${round.id}">
+            <label for="round-${round.id}">${round.name}</label>
+        `;
+        container.appendChild(div);
+    });
+    
+    showModal('round-selection-modal');
+}
+
+function generateMultiRoundChart() {
+    const selectedRounds = [];
+    document.querySelectorAll('#round-selection-list input:checked').forEach(checkbox => {
+        selectedRounds.push(checkbox.value);
+    });
+    
+    if (selectedRounds.length === 0) {
+        alert('Please select at least one round');
+        return;
+    }
+    
+    renderMultiRoundChart(selectedRounds);
+    hideModal('round-selection-modal');
+}
+
+function renderMultiRoundChart(roundIds) {
+    const ctx = document.getElementById('progress-chart').getContext('2d');
+    if (chart) chart.destroy();
+    
+    const datasets = [];
+    const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+    
+    roundIds.forEach((roundId, index) => {
+        const round = findFolderById(roundId);
+        if (!round) return;
+        
+        const roundMarks = collectAllMarks([round]);
+        const subjects = [...new Set(roundMarks.map(m => m.subject))];
+        
+        const data = subjects.map(subject => {
+            const subjectMarks = roundMarks.filter(m => m.subject === subject);
+            const avgPercentage = subjectMarks.length > 0 ? 
+                subjectMarks.reduce((sum, m) => sum + (m.marksObtained / m.totalMarks * 100), 0) / subjectMarks.length : 0;
+            return avgPercentage;
+        });
+        
+        datasets.push({
+            label: round.name,
+            data: data,
+            backgroundColor: colors[index % colors.length],
+            borderColor: colors[index % colors.length],
+            borderWidth: 1
+        });
+    });
+    
+    const allSubjects = [...new Set(roundIds.flatMap(id => {
+        const round = findFolderById(id);
+        return round ? collectAllMarks([round]).map(m => m.subject) : [];
+    }))];
+    
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: allSubjects,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Percentage (%)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Subjects'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Update download button event listener
+document.getElementById('download-report-btn')?.addEventListener('click', showRoundSelectionModal);
+document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
+
+// Add this function call at the end of your initApp function
+
+function renderChart() {
+    const ctx = document.getElementById('progress-chart').getContext('2d');
+    if (chart) chart.destroy();
+
+    const labels = marks.map(m => m.subject);
+    const percentages = marks.map(m => 
+        m.totalMarks > 0 ? ((m.marksObtained / m.totalMarks) * 100).toFixed(2) : 0
+    );
+
+    // Generate unique colors for each subject
+    const colorPalette = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', 
+        '#FF9F40', '#8ac6d1', '#ff6b6b', '#a5dee5', '#ffaaab'
+    ];
+    
+    const backgroundColors = [];
+    const subjectColorMap = {};
+    
+    // Assign a consistent color to each subject
+    marks.forEach((mark, index) => {
+        if (!subjectColorMap[mark.subject]) {
+            subjectColorMap[mark.subject] = colorPalette[Object.keys(subjectColorMap).length % colorPalette.length];
+        }
+        backgroundColors.push(subjectColorMap[mark.subject]);
+    });
+
+    chart = new Chart(ctx, {
+        type: chartType,
+        data: {
+            labels,
+            datasets: [{
+                label: 'Percentage',
+                data: percentages,
+                backgroundColor: backgroundColors,
+                borderColor: 'rgba(0,0,0,0.1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { 
+                    display: true,
+                    position: 'right'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const mark = marks[context.dataIndex];
+                            return `${mark.marksObtained}/${mark.totalMarks} (${context.raw}%)`;
+                        }
+                    }
+                }
+            },
+            scales: { y: { beginAtZero: true, max: 100 } }
+        }
+    });
+}
+
+
+
+
+
+// Add this helper function to find folder by ID
+function findFolderById(folders, id) {
+    for (const folder of folders) {
+        if (folder.id === id) return folder;
+        if (folder.subfolders && folder.subfolders.length > 0) {
+            const found = findFolderById(folder.subfolders, id);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+
+// ===============================
+// 📊 UPDATE DASHBOARD + MARKS
+// ===============================
+// ===============================
+// 📊 UPDATE DASHBOARD + MARKS
+// ===============================
+function updateStats() {
+  // use global marks array
+  const totalSubjects = marks.length;
+  const totalMarks = marks.reduce((s, m) => s + (Number(m.totalMarks) || 0), 0);
+  const obtained = marks.reduce((s, m) => s + (Number(m.marksObtained) || 0), 0);
+  const percentages = marks.map(m => m.totalMarks > 0 ? (m.marksObtained / m.totalMarks) * 100 : 0);
+
+  const avg = totalMarks ? ((obtained / totalMarks) * 100).toFixed(2) : '0.00';
+  const highest = percentages.length ? Math.max(...percentages).toFixed(2) : '0.00';
+  const lowest = percentages.length ? Math.min(...percentages).toFixed(2) : '0.00';
+
+  document.getElementById('total-subjects').textContent = totalSubjects;
+  document.getElementById('overall-percentage').textContent = `${avg}%`;
+  document.getElementById('highest-percentage').textContent = `${highest}%`;
+  document.getElementById('lowest-percentage').textContent = `${lowest}%`;
+  document.getElementById('total-marks-card').textContent = totalMarks;
+  document.getElementById('obtained-marks-card').textContent = obtained;
+}
+
+
+
+
+// ===============================
+// 📈 RENDER CHART
+// ===============================
+function renderChart() {
+    const ctx = document.getElementById('progress-chart').getContext('2d');
+    if (chart) chart.destroy();
+
+    const labels = marks.map(m => m.subject);
+    const percentages = marks.map(m => 
+        m.totalMarks > 0 ? ((m.marksObtained / m.totalMarks) * 100).toFixed(2) : 0
+    );
+
+    chart = new Chart(ctx, {
+        type: chartType,
+        data: {
+            labels,
+            datasets: [{
+                label: 'Percentage',
+                data: percentages,
+                backgroundColor: percentages.map(p =>
+                    p >= 75 ? 'rgba(6,214,160,0.7)' :
+                    p >= 40 ? 'rgba(255,209,102,0.7)' :
+                              'rgba(239,71,111,0.7)'
+                ),
+                borderColor: 'rgba(0,0,0,0.1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,  // ✅ respect CSS height
+            plugins: { 
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const mark = marks[context.dataIndex];
+                            return `${mark.marksObtained}/${mark.totalMarks} (${context.raw}%)`;
+                        }
+                    }
+                }
+            },
+            scales: { y: { beginAtZero: true, max: 100 } }
+        }
+    });
+}
+
+
+ 
+function updateFolderDropdown() {
+    const folderSelect = document.getElementById("marks-folder");
+    if (!folderSelect) return;
+
+    // Clear existing options
+    folderSelect.innerHTML = '<option value="">Select a folder</option>';
+
+    // Add all folders recursively
+    function addFolders(folders, prefix = "") {
+        folders.forEach(folder => {
+            const option = document.createElement("option");
+            option.value = folder.id;
+            option.textContent = prefix + folder.name;
+            folderSelect.appendChild(option);
+
+            if (folder.subfolders && folder.subfolders.length > 0) {
+                addFolders(folder.subfolders, prefix + "-- ");
+            }
+        });
+    }
+
+    addFolders(folders);
+}
+
+
+
+// Replace the updateFolderSelects function with this:
+function updateFolderSelects() {
+    const currentFolderSelect = document.getElementById('marks-folder');
+    const folderFilterSelect = document.getElementById('folder-select');
+    
+    // Clear existing options except the first one
+    currentFolderSelect.innerHTML = '<option value="">Select a folder</option>';
+    folderFilterSelect.innerHTML = '<option value="all">All Folders</option>';
+    
+    // Add only top-level folders (no subfolders)
+    folders.forEach(folder => {
+        if (!folder.parentId) {
+            const option1 = document.createElement('option');
+            option1.value = folder.id;
+            option1.textContent = folder.name;
+            currentFolderSelect.appendChild(option1);
+            
+            const option2 = document.createElement('option');
+            option2.value = folder.id;
+            option2.textContent = folder.name;
+            folderFilterSelect.appendChild(option2);
+        }
+    });
+}
+
+// Utility functions
+function showPage(pageId) {
+    document.querySelectorAll('.page').forEach(page => {
+        page.classList.remove('active');
+    });
+    document.getElementById(pageId).classList.add('active');
+}
+
+function showModal(modalId) {
+    document.getElementById(modalId).classList.add('active');
+}
+
+function hideModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+function showError(elementId, message) {
+    const errorElement = document.getElementById(elementId);
+    errorElement.textContent = message;
+    errorElement.style.display = 'block';
+    setTimeout(() => {
+        errorElement.style.display = 'none';
+    }, 5000);
+}
+
+function loadThemePreference() {
+    const darkMode = localStorage.getItem('darkMode') === 'true';
+    document.getElementById('theme-switch').checked = darkMode;
+    document.body.classList.toggle('dark-theme', darkMode);
+}
+
+function toggleTheme() {
+    const darkMode = document.getElementById('theme-switch').checked;
+    localStorage.setItem('darkMode', darkMode);
+    document.body.classList.toggle('dark-theme', darkMode);
+}
+
+function downloadReport() {
+    html2canvas(document.querySelector('.progress-report')).then(canvas => {
+        const link = document.createElement('a');
+        link.download = 'progress-report.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+}
+
+function clearUI() {
+    document.getElementById('folder-list').innerHTML = '';
+    document.getElementById('marks-table-body').innerHTML = '';
+    document.getElementById('overall-percentage').textContent = '0%';
+    document.getElementById('total-subjects').textContent = '0';
+    document.getElementById('highest-percentage').textContent = '0%';
+    document.getElementById('lowest-percentage').textContent = '0%';
+    
+    if (chart) {
+        chart.destroy();
+        chart = null;
+    }
+}
+
+// Data loading
+// Replace the loadUserData function with this:
+// Data loading
+// Replace the loadUserData function with this:
+// ✅ Full updated loadUserData function
+// ===============================
+// 🔑 LOAD USER DATA FROM BACKEND
+// ===============================
+// ===============================
+// 📂 LOAD USER DATA
+// ===============================
+async function loadUserData() {
+  try {
+    // use dataAPI wrapper (it adds auth header)
+    const data = await dataAPI.getUserData();
+
+    // normalize user object
+    currentUser = data.user || { username: data.username || data.user?.username || 'User' };
+
+    // normalize folders
+    folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
+
+    // ensure each folder has subfolders array to avoid runtime checks elsewhere
+    function ensureSubfolders(list) {
+      list.forEach(f => {
+        if (!f.subfolders) f.subfolders = [];
+        ensureSubfolders(f.subfolders);
+      });
+    }
+    ensureSubfolders(folders);
+
+    // collect marks array for quick global stats and lookups
+    marks = collectAllMarks(folders);
+
+    // update UI
+    document.getElementById('user-name').textContent = currentUser.username || 'User';
+    document.getElementById('user-avatar').textContent = (currentUser.username || 'U').charAt(0).toUpperCase();
+
+    renderFolders();
+    populateFolderSelect();
+    renderMarksTable(selectedFolderId || 'all');
+    updateStats();
+    renderChart(selectedFolderId || 'all');
+
+    // optional: update api status
+    checkApiConnection();
+  } catch (err) {
+    console.error('Error loading user data:', err);
+    showError('login-error', err.message || 'Failed to load user data.');
+  }
+}
+
+
+
+
+
+
+
+
+// Enhanced function to get folder name by ID with caching
+function getFolderName(folderId) {
+  if (!folderId) return "Uncategorized";
+  
+  // Try to find in cache first (if implemented)
+  const folder = findFolderById(folderId);
+  
+  if (folder && folder.name) {
+    return folder.name;
+  }
+  
+  // If not found, try to extract from marks data
+  const markWithFolder = marks.find(m => m.folderId === folderId);
+  if (markWithFolder && markWithFolder.folderName) {
+    return markWithFolder.folderName;
+  }
+  
+  return "Unknown Folder";
+}
+
+function findFolderInSubfolders(folder, targetId) {
+    if (!folder.subfolders || folder.subfolders.length === 0) return null;
+    
+    for (const subfolder of folder.subfolders) {
+        if (subfolder.id === targetId) return subfolder;
+        
+        const found = findFolderInSubfolders(subfolder, targetId);
+        if (found) return found;
+    }
+    
+    return null;
+}
+
+
+// Replace the renderMarksTable function with this:
+// ✅ Render marks into the table
+function renderMarksTable(selectedFolderId = "all") {
+  const tableBody = document.getElementById("marks-table-body");
+  const emptyState = document.getElementById("empty-marks");
+  tableBody.innerHTML = "";
+
+  let marksToShow = [];
+
+  if (selectedFolderId === "all") {
+    // Collect marks from all folders
+    marksToShow = collectAllMarks(folders);
+  } else {
+    // Find marks from a specific folder
+    const folder = findFolderById(selectedFolderId, folders);
+    if (folder) {
+      marksToShow = collectAllMarks([folder]);
+    }
+  }
+
+  // Show empty state if no marks
+  if (marksToShow.length === 0) {
+    emptyState.style.display = "block";
+    return;
+  } else {
+    emptyState.style.display = "none";
+  }
+
+  marksToShow.forEach(mark => {
+    // Get folder name - use the improved function
+    const folderName = getFolderName(mark.folderId);
+
+    // Calculate percentage
+    const percentage = mark.totalMarks > 0
+      ? ((mark.marksObtained / mark.totalMarks) * 100).toFixed(2)
+      : "0.00";
+
+    // Choose color class based on percentage
+    let percentageClass = "low";
+    if (percentage >= 75) {
+      percentageClass = "high";
+    } else if (percentage >= 40) {
+      percentageClass = "medium";
+    }
+
+    // Format date if it exists
+    let formattedDate = "";
+    if (mark.date) {
+      const dateObj = new Date(mark.date);
+      formattedDate = !isNaN(dateObj) ? dateObj.toLocaleDateString() : mark.date;
+    }
+
+    // Build row
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${mark.subject || "Unnamed Subject"}</td>
+      <td>${mark.marksObtained || 0}</td>
+      <td>${mark.totalMarks || 0}</td>
+      <td><span class="percentage ${percentageClass}">${percentage}%</span></td>
+      <td>${formattedDate}</td>
+      <td>${folderName}</td>
+      <td>
+        <button class="action-btn edit" onclick="editMark('${mark.folderId}', '${mark.id}')">✏️</button>
+        <button class="action-btn delete" onclick="deleteMark('${mark.folderId}', '${mark.id}')">🗑️</button>
+      </td>
+    `;
+    tableBody.appendChild(tr);
+  });
+}
+
+let customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
+
+function renderSubjects() {
+    const container = document.getElementById('subjects-list');
+    const subjectSelect = document.getElementById('subject');
+    
+    container.innerHTML = '';
+    
+    // Update subject dropdown
+    if (subjectSelect) {
+        subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+        customSubjects.forEach(subject => {
+            const option = document.createElement('option');
+            option.value = subject;
+            option.textContent = subject;
+            subjectSelect.appendChild(option);
+        });
+    }
+    
+    // Render subject tags
+    customSubjects.forEach(subject => {
+        const tag = document.createElement('span');
+        tag.className = 'subject-tag';
+        tag.textContent = subject;
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '×';
+        deleteBtn.style.background = 'none';
+        deleteBtn.style.border = 'none';
+        deleteBtn.style.color = 'white';
+        deleteBtn.style.marginLeft = '5px';
+        deleteBtn.style.cursor = 'pointer';
+        deleteBtn.onclick = () => removeSubject(subject);
+        
+        tag.appendChild(deleteBtn);
+        container.appendChild(tag);
+    });
+}
+
+function addSubject() {
+    const subjectInput = document.getElementById('new-subject');
+    const subject = subjectInput.value.trim();
+    
+    if (subject && !customSubjects.includes(subject)) {
+        customSubjects.push(subject);
+        localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+        renderSubjects();
+        subjectInput.value = '';
+    }
+}
+
+function removeSubject(subject) {
+    customSubjects = customSubjects.filter(s => s !== subject);
+    localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+    renderSubjects();
+}
+
+// Add to setupEventListeners:
+
+
+async function deleteMark(folderId, markId) {
+    console.log("Deleting mark → folderId:", folderId, "markId:", markId);
+
+    try {
+        await dataAPI.deleteMarks(folderId, markId);
+        await loadUserData(); // refresh table and sidebar
+    } catch (err) {
+        console.error("Delete failed:", err);
+        alert("Failed to delete mark: " + (err.message || err));
+    }
+}
+
+
+function editMark(folderId, markId) {
+    const mark = marks.find(m => m.id === markId);
+    if (!mark) return;
+
+    // Prefill form
+    document.getElementById('marks-folder').value = folderId;
+    document.getElementById('subject').value = mark.subject;
+    document.getElementById('marks-obtained').value = mark.marksObtained;
+    document.getElementById('total-marks').value = mark.totalMarks;
+    document.getElementById('marks-date').value = mark.date;
+
+    const btn = document.getElementById('add-marks-btn');
+    btn.textContent = 'Save Changes';
+
+    // Overwrite onclick temporarily
+    btn.onclick = async () => {
+        await dataAPI.updateMarks(folderId, markId, {
+            subject: document.getElementById('subject').value,
+            marksObtained: document.getElementById('marks-obtained').value,
+            totalMarks: document.getElementById('total-marks').value,
+            date: document.getElementById('marks-date').value,
+        });
+        btn.textContent = 'Add Marks';
+        btn.onclick = addMarks; // restore default
+        await loadUserData();
+    };
+}
+
+
+
+
+
+// Populate folder dropdowns (marks form + marks table filter)
+// ===============================
+// 📂 POPULATE FOLDER SELECT DROPDOWN
+// ===============================
+function populateFolderSelect() {
+  const currentFolderSelect = document.getElementById('marks-folder');
+  const folderFilterSelect = document.getElementById('folder-select');
+
+  if (!currentFolderSelect || !folderFilterSelect) return;
+
+  // clear
+  currentFolderSelect.innerHTML = '<option value="">Select a folder</option>';
+  folderFilterSelect.innerHTML = '<option value="all">All Folders</option>';
+
+  // add nested options with prefix
+  function addOptions(list, prefix = '') {
+    list.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = prefix + f.name;
+      currentFolderSelect.appendChild(opt);
+
+      const opt2 = document.createElement('option');
+      opt2.value = f.id;
+      opt2.textContent = prefix + f.name;
+      folderFilterSelect.appendChild(opt2);
+
+      if (f.subfolders && f.subfolders.length) {
+        addOptions(f.subfolders, prefix + '-- ');
+      }
+    });
+  }
+
+  if (Array.isArray(folders) && folders.length) addOptions(folders);
+  else {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No folders available';
+    currentFolderSelect.appendChild(opt);
+  }
+}
+
+
+
+
+// Add this function to help debug
+function debugMarks() {
+    console.log('Current marks:', marks);
+    console.log('Current folders:', folders);
+    
+    // Check if marks are being extracted correctly
+    let totalMarks = 0;
+    folders.forEach(folder => {
+        if (folder.marks) totalMarks += folder.marks.length;
+        if (folder.subfolders) {
+            folder.subfolders.forEach(subfolder => {
+                if (subfolder.marks) totalMarks += subfolder.marks.length;
+            });
+        }
+    });
+    
+    console.log(`Total marks in folders: ${totalMarks}`);
+    console.log(`Total marks in extracted array: ${marks.length}`);
+}
+
+function debugData() {
+    console.log('=== DEBUG DATA ===');
+    console.log('Current user:', currentUser);
+    console.log('Folders:', folders);
+    console.log('Marks:', marks);
+    
+    // Check API response structure
+    dataAPI.getUserData()
+        .then(data => console.log('API Response:', data))
+        .catch(error => console.error('API Error:', error));
+}
+
+// Optional: Function to build a folder cache for faster lookups
+function buildFolderCache() {
+  const cache = {};
+  
+  function processFolders(folderList, parentPath = "") {
+    for (const folder of folderList) {
+      const fullPath = parentPath ? `${parentPath} → ${folder.name}` : folder.name;
+      cache[folder.id] = fullPath;
+      
+      if (folder.subfolders && folder.subfolders.length > 0) {
+        processFolders(folder.subfolders, fullPath);
+      }
+    }
+  }
+  
+  processFolders(folders);
+  return cache;
+}
+
+// Then modify getFolderName to use the cache:
+let folderCache = {};
+function getFolderName(folderId) {
+  if (!folderId) return "Uncategorized";
+  
+  // Build cache if empty
+  if (Object.keys(folderCache).length === 0) {
+    folderCache = buildFolderCache();
+  }
+  
+  return folderCache[folderId] || "Unknown Folder";
+}
+
+// Remember to refresh the cache when folders change
+function refreshFolderCache() {
+  folderCache = buildFolderCache();
+}
+// You can call this from the browser console to debug
+window.debugData = debugData;
+
+// Initialize the app when the DOM is loaded
+document.addEventListener('DOMContentLoaded', initApp);
+</script>
+    </body>
+</html>
