@@ -2054,7 +2054,10 @@ document.getElementById('add-subject-btn')?.addEventListener('click', addSubject
   document.getElementById('create-folder-btn')?.addEventListener('click', createFolder);
 
   // ---------------- Marks actions ----------------
-  document.getElementById('add-marks-btn')?.addEventListener('click', addMarks);
+document.getElementById('add-marks-btn')?.addEventListener('click', function(event) {
+    event.preventDefault();
+    addMarks(event);
+});
   document.getElementById('folder-select')?.addEventListener('change', filterMarksByFolder);
 
   // ---------------- Settings actions ----------------
@@ -3471,10 +3474,25 @@ function renderFolderRecursive(folder, container) {
 // Marks functions
 // ✅ Add marks to database
 // Add marks from form to database
-async function addMarks() {
+async function addMarks(event) {
+    // Prevent default form submission if it's an event
+    if (event && event.preventDefault) {
+        event.preventDefault();
+    }
+    
     const folderId = document.getElementById('marks-folder').value;
-    const subjectSelect = document.getElementById('subject');
-    const subject = subjectSelect ? subjectSelect.value.trim() : '';
+    
+    // Get subject value properly
+    let subject = '';
+    const subjectElement = document.getElementById('subject');
+    if (subjectElement) {
+        if (subjectElement.tagName === 'SELECT') {
+            subject = subjectElement.value;
+        } else {
+            subject = subjectElement.value.trim();
+        }
+    }
+    
     const marksObtained = Number(document.getElementById('marks-obtained').value);
     const totalMarks = Number(document.getElementById('total-marks').value);
     const date = document.getElementById('marks-date').value || '';
@@ -3505,17 +3523,26 @@ async function addMarks() {
         });
         
         // Clear form
-        if (subjectSelect) subjectSelect.value = '';
+        if (subjectElement) subjectElement.value = '';
         document.getElementById('marks-obtained').value = '';
         document.getElementById('total-marks').value = '';
         
         // Refresh data
         await loadUserData();
+        
+        alert('Marks added successfully!');
     } catch (err) {
         console.error('Error adding marks:', err);
         alert('Failed to add marks: ' + (err.message || err));
     }
-    await loadUserData();
+    // Add this to your addMarks function for debugging
+console.log('Sending marks data:', {
+    folderId,
+    subject: finalSubject,
+    marksObtained,
+    totalMarks,
+    date
+});
 }
 
 
