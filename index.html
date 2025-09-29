@@ -1339,11 +1339,12 @@ const dataAPI = {
         await apiRequest('/api/clear-data', {
             method: 'DELETE',
         }),
-        saveUserData: async (folders, subjects) => 
-        await apiRequest('/api/user/data', {
-            method: 'POST',
-            body: { folders, subjects },
-        }),
+        // In your dataAPI object, update saveUserData:
+saveUserData: async (folders, subjects) => 
+    await apiRequest('/api/user/data', {
+        method: 'POST',
+        body: { folders, subjects },
+    }),
 };
 </script>
     </head>
@@ -1580,6 +1581,16 @@ const dataAPI = {
 
                         <div class="marks-form">
                             <h3 class="form-title">Add New Marks</h3>
+                            <div class="form-group">
+        <label>Manage Subjects</label>
+        <div class="subject-input-container">
+            <input type="text" id="new-subject" class="form-control" placeholder="New subject name">
+            <button class="btn btn-success" id="add-subject-btn">Add Subject</button>
+        </div>
+        <div class="subjects-list" id="subjects-list">
+            <!-- Subjects will appear here as tags -->
+        </div>
+    </div>
                             <div class="form-group">
                                 <label for="current-folder">Current
                                     Folder</label>
@@ -1820,6 +1831,7 @@ const dataAPI = {
         </div>
     </div>
 </div>
+<button class="btn btn-warning" id="debug-stats-btn" style="margin: 10px;">Debug Stats</button>
 
         <script>
     let chartType = localStorage.getItem('chartType') || 'bar';
@@ -1923,6 +1935,7 @@ function initApp() {
     loadThemePreference();
     initAppUpdates();
         initChartAndResultFeatures();
+    customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
 
     // Setup password toggles
     setupPasswordToggles();
@@ -2021,6 +2034,8 @@ function backupDataLocally() {
 // Call backupDataLocally() after any data modification
 // Event Listeners
 function setupEventListeners() {
+    // Add this to your setupEventListeners function temporarily:
+document.getElementById('debug-stats-btn')?.addEventListener('click', debugStats);
     document.getElementById('download-report-btn')?.addEventListener('click', showRoundSelectionModal);
 document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
     document.getElementById('retry-api-btn')?.addEventListener('click', checkApiConnection);
@@ -2323,34 +2338,34 @@ function findFolderById(id, list = folders) {
 // Helper function to collect all marks from folders and subfolders
 // Enhanced collectAllMarks function
 function collectAllMarks(folderList) {
-    const out = [];
+    const allMarks = [];
     
-    if (!folderList || !Array.isArray(folderList)) return out;
-
-    function recurse(list) {
-        for (const folder of list) {
-            // If this folder has marks, process them
-            if (Array.isArray(folder.marks)) {
+    function extractMarks(folders) {
+        if (!folders || !Array.isArray(folders)) return;
+        
+        folders.forEach(folder => {
+            // Add marks from current folder
+            if (folder.marks && Array.isArray(folder.marks)) {
                 folder.marks.forEach(mark => {
-                    // Ensure every mark has its folderId and folderName
+                    // Ensure mark has folder information
                     const processedMark = {
                         ...mark,
                         folderId: mark.folderId || folder.id,
                         folderName: mark.folderName || folder.name
                     };
-                    out.push(processedMark);
+                    allMarks.push(processedMark);
                 });
             }
-
-            // If this folder has subfolders, recurse
-            if (folder.subfolders && folder.subfolders.length) {
-                recurse(folder.subfolders);
+            
+            // Recursively process subfolders
+            if (folder.subfolders && folder.subfolders.length > 0) {
+                extractMarks(folder.subfolders);
             }
-        }
+        });
     }
-
-    recurse(folderList);
-    return out;
+    
+    extractMarks(folderList);
+    return allMarks;
 }
 
 // Marks functions
@@ -3500,6 +3515,7 @@ async function addMarks() {
         console.error('Error adding marks:', err);
         alert('Failed to add marks: ' + (err.message || err));
     }
+    await loadUserData();
 }
 
 
@@ -3798,6 +3814,9 @@ function renderChart() {
     const ctx = document.getElementById('progress-chart').getContext('2d');
     if (chart) chart.destroy();
 
+    // Use the global marks array which should contain all marks
+
+
     // Only show marks from selected folder
     let marksToShow = [];
     if (selectedFolderId) {
@@ -3909,22 +3928,54 @@ function findFolderById(folders, id) {
 // 📊 UPDATE DASHBOARD + MARKS
 // ===============================
 function updateStats() {
-  // use global marks array
-  const totalSubjects = marks.length;
-  const totalMarks = marks.reduce((s, m) => s + (Number(m.totalMarks) || 0), 0);
-  const obtained = marks.reduce((s, m) => s + (Number(m.marksObtained) || 0), 0);
-  const percentages = marks.map(m => m.totalMarks > 0 ? (m.marksObtained / m.totalMarks) * 100 : 0);
-
-  const avg = totalMarks ? ((obtained / totalMarks) * 100).toFixed(2) : '0.00';
-  const highest = percentages.length ? Math.max(...percentages).toFixed(2) : '0.00';
-  const lowest = percentages.length ? Math.min(...percentages).toFixed(2) : '0.00';
-
-  document.getElementById('total-subjects').textContent = totalSubjects;
-  document.getElementById('overall-percentage').textContent = `${avg}%`;
-  document.getElementById('highest-percentage').textContent = `${highest}%`;
-  document.getElementById('lowest-percentage').textContent = `${lowest}%`;
-  document.getElementById('total-marks-card').textContent = totalMarks;
-  document.getElementById('obtained-marks-card').textContent = obtained;
+    // Collect ALL marks from ALL folders and subfolders
+    const allMarks = collectAllMarks(folders);
+    
+    // Calculate statistics
+    const totalSubjects = allMarks.length;
+    
+    const totalMarks = allMarks.reduce((sum, m) => sum + (Number(m.totalMarks) || 0), 0);
+    const obtainedMarks = allMarks.reduce((sum, m) => sum + (Number(m.marksObtained) || 0), 0);
+    
+    // Calculate percentages for each mark
+    const percentages = allMarks.map(m => {
+        if (m.totalMarks > 0) {
+            return (m.marksObtained / m.totalMarks) * 100;
+        }
+        return 0;
+    });
+    
+    // Calculate overall average percentage
+    let avgPercentage = 0;
+    if (totalMarks > 0) {
+        avgPercentage = (obtainedMarks / totalMarks) * 100;
+    }
+    
+    // Find highest and lowest percentages
+    let highestPercentage = 0;
+    let lowestPercentage = 100;
+    
+    if (percentages.length > 0) {
+        highestPercentage = Math.max(...percentages);
+        lowestPercentage = Math.min(...percentages);
+    }
+    
+    // Update the UI
+    document.getElementById('total-subjects').textContent = totalSubjects;
+    document.getElementById('overall-percentage').textContent = `${avgPercentage.toFixed(2)}%`;
+    document.getElementById('highest-percentage').textContent = `${highestPercentage.toFixed(2)}%`;
+    document.getElementById('lowest-percentage').textContent = `${lowestPercentage.toFixed(2)}%`;
+    document.getElementById('total-marks-card').textContent = totalMarks;
+    document.getElementById('obtained-marks-card').textContent = obtainedMarks;
+    
+    console.log('Stats updated:', {
+        totalSubjects,
+        totalMarks,
+        obtainedMarks,
+        avgPercentage,
+        highestPercentage,
+        lowestPercentage
+    });
 }
 
 
@@ -4106,19 +4157,22 @@ function clearUI() {
 // ===============================
 // 📂 LOAD USER DATA
 // ===============================
-async function loadUserData() {
+// Update this function to maintain the global marks array
+function loadUserData() {
   try {
     const data = await dataAPI.getUserData();
 
     currentUser = data.user || { username: data.username || data.user?.username || 'User' };
     folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
 
-    // Load subjects from database OR fallback to localStorage
+    // Update the global marks array with ALL marks
+    marks = collectAllMarks(folders);
+
+    // Load subjects
     if (data.subjects && Array.isArray(data.subjects)) {
         customSubjects = data.subjects;
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
     } else {
-        // Fallback to localStorage
         customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
     }
 
@@ -4129,15 +4183,37 @@ async function loadUserData() {
     renderFolders();
     populateFolderSelect();
     renderMarksTable();
-    updateStats();
+    updateStats(); // Make sure this is called
     renderChart();
-    renderSubjects(); // Make sure this is called
+    renderSubjects();
 
   } catch (err) {
     console.error('Error loading user data:', err);
     showError('login-error', err.message || 'Failed to load user data.');
   }
 }
+
+function debugStats() {
+    const allMarks = collectAllMarks(folders);
+    console.log('=== DEBUG STATS ===');
+    console.log('Total folders:', folders.length);
+    console.log('Total marks found:', allMarks.length);
+    console.log('All marks:', allMarks);
+    
+    allMarks.forEach((mark, index) => {
+        console.log(`Mark ${index + 1}:`, {
+            subject: mark.subject,
+            obtained: mark.marksObtained,
+            total: mark.totalMarks,
+            percentage: mark.totalMarks > 0 ? ((mark.marksObtained / mark.totalMarks) * 100).toFixed(2) + '%' : '0%'
+        });
+    });
+    
+    updateStats();
+}
+
+// Call this from browser console if needed
+window.debugStats = debugStats;
 
 
 
@@ -4259,10 +4335,7 @@ function renderSubjects() {
             tag.className = 'subject-tag';
             tag.innerHTML = `
                 ${subject}
-                <button class="delete-subject" onclick="removeSubject('${subject}')" 
-                        style="background: none; border: none; color: white; margin-left: 5px; cursor: pointer; font-size: 12px; padding: 2px 4px; border-radius: 50%;">
-                    ×
-                </button>
+                <button class="delete-subject" onclick="removeSubject('${subject}')">×</button>
             `;
             container.appendChild(tag);
         });
@@ -4308,7 +4381,12 @@ function addSubject(subjectName = null) {
         subject = subjectInput ? subjectInput.value.trim() : '';
     }
     
-    if (subject && !customSubjects.includes(subject)) {
+    if (!subject) {
+        alert('Please enter a subject name');
+        return;
+    }
+    
+    if (!customSubjects.includes(subject)) {
         customSubjects.push(subject);
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
         
@@ -4322,29 +4400,39 @@ function addSubject(subjectName = null) {
         renderSubjects();
         updateMarksForm();
         
+        // Clear input if it was from the form
         if (!subjectName) {
             const subjectInput = document.getElementById('new-subject');
             if (subjectInput) subjectInput.value = '';
         }
+        
+        alert(`Subject "${subject}" added successfully!`);
+    } else {
+        alert(`Subject "${subject}" already exists!`);
     }
 }
 
-function removeSubject(subject) {
-    if (confirm(`Delete subject "${subject}"?`)) {
+async function removeSubject(subject) {
+    if (confirm(`Delete subject "${subject}"? This will remove it from the subject list but won't delete existing marks.`)) {
+        // Remove from customSubjects array
         customSubjects = customSubjects.filter(s => s !== subject);
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
         
-        // Also update database
+        // Also update database if possible
         try {
-            dataAPI.saveUserData(folders, customSubjects);
+            await dataAPI.saveUserData(folders, customSubjects);
         } catch (error) {
             console.log('Subjects updated locally only');
         }
         
+        // Update UI
         renderSubjects();
+        updateMarksForm();
+        
+        // Show confirmation
+        alert(`Subject "${subject}" deleted successfully!`);
     }
 }
-
 // Helper function to show temporary messages
 
 
@@ -4360,7 +4448,9 @@ async function deleteMark(folderId, markId) {
     } catch (err) {
         console.error("Delete failed:", err);
         alert("Failed to delete mark: " + (err.message || err));
+
     }
+    await loadUserData();
 }
 
 
