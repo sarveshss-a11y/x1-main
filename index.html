@@ -1592,16 +1592,7 @@ const dataAPI = {
                     </div>
                 </div>
             </div>
-<div class="settings-section">
-    <h3 class="settings-title"><i>📚</i> Manage Subjects</h3>
-    <div class="subject-input-container">
-        <input type="text" id="new-subject" class="form-control" placeholder="Enter subject name">
-        <button class="btn btn-success" id="add-subject-btn">Add Subject</button>
-    </div>
-    <div id="subjects-list" class="subjects-list">
-        <!-- Subjects will be added here dynamically -->
-    </div>
-</div>
+
             <!-- Settings Page -->
             <div class="page" id="settings-page">
                 <button class="btn btn-warning back-btn" id="back-btn">
@@ -1761,6 +1752,9 @@ const dataAPI = {
     let chartType = localStorage.getItem('chartType') || 'bar';
 
 // State management
+// Global variables for chart and result generation
+let selectedRoundsForChart = [];
+let selectedRoundsForResult = [];
 let currentUser = null;
 let folders = [];
 let marks = [];
@@ -1855,6 +1849,8 @@ function initApp() {
     // Load theme preference first
     loadThemePreference();
     initAppUpdates();
+        initChartAndResultFeatures();
+
     // Setup password toggles
     setupPasswordToggles();
         renderSubjects();
@@ -2402,6 +2398,468 @@ async function changeUsername() {
     } catch (error) {
         alert('Error changing username: ' + error.message);
     }
+}
+
+
+function showRoundSelectionForChart() {
+    const container = document.getElementById('round-selection-list');
+    container.innerHTML = '';
+    
+    folders.forEach(round => {
+        const div = document.createElement('div');
+        div.className = 'round-selection-item';
+        div.style.marginBottom = '10px';
+        div.style.padding = '8px';
+        div.style.border = '1px solid #ddd';
+        div.style.borderRadius = '4px';
+        
+        div.innerHTML = `
+            <input type="checkbox" id="chart-round-${round.id}" value="${round.id}" 
+                   ${selectedRoundsForChart.includes(round.id) ? 'checked' : ''}>
+            <label for="chart-round-${round.id}" style="margin-left: 8px; cursor: pointer;">
+                ${round.name} (${getMarksCount(round)} marks)
+            </label>
+        `;
+        
+        container.appendChild(div);
+    });
+    
+    showModal('round-selection-modal');
+    
+    // Update modal title and button for chart
+    document.querySelector('#round-selection-modal .modal-title').textContent = 'Select Rounds for Chart';
+    document.getElementById('generate-chart-btn').textContent = 'Generate Chart';
+    document.getElementById('generate-chart-btn').onclick = generateMultiRoundChart;
+}
+
+function getMarksCount(round) {
+    let count = 0;
+    function countMarks(folder) {
+        count += folder.marks ? folder.marks.length : 0;
+        if (folder.subfolders) {
+            folder.subfolders.forEach(countMarks);
+        }
+    }
+    countMarks(round);
+    return count;
+}
+
+// Generate multi-round chart
+function generateMultiRoundChart() {
+    const selectedRounds = [];
+    document.querySelectorAll('#round-selection-list input:checked').forEach(checkbox => {
+        selectedRounds.push(checkbox.value);
+    });
+    
+    if (selectedRounds.length === 0) {
+        alert('Please select at least one round');
+        return;
+    }
+    
+    selectedRoundsForChart = selectedRounds;
+    renderMultiRoundChart(selectedRounds);
+    hideModal('round-selection-modal');
+}
+
+// Render multi-round chart with different bars per round
+function renderMultiRoundChart(roundIds) {
+    const ctx = document.getElementById('progress-chart').getContext('2d');
+    if (chart) chart.destroy();
+    
+    // Get all unique subjects from selected rounds
+    const allSubjects = new Set();
+    roundIds.forEach(roundId => {
+        const round = findFolderById(roundId);
+        if (round) {
+            const roundMarks = collectAllMarks([round]);
+            roundMarks.forEach(mark => allSubjects.add(mark.subject));
+        }
+    });
+    
+    const subjects = Array.from(allSubjects);
+    const datasets = [];
+    const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8ac6d1', '#ff6b6b'];
+    
+    roundIds.forEach((roundId, index) => {
+        const round = findFolderById(roundId);
+        if (!round) return;
+        
+        const roundMarks = collectAllMarks([round]);
+        const data = subjects.map(subject => {
+            const subjectMarks = roundMarks.filter(m => m.subject === subject);
+            if (subjectMarks.length === 0) return null;
+            
+            const avgPercentage = subjectMarks.reduce((sum, m) => 
+                sum + (m.marksObtained / m.totalMarks * 100), 0) / subjectMarks.length;
+            return Math.round(avgPercentage * 100) / 100;
+        });
+        
+        datasets.push({
+            label: round.name,
+            data: data,
+            backgroundColor: colors[index % colors.length],
+            borderColor: colors[index % colors.length],
+            borderWidth: 2
+        });
+    });
+    
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: subjects,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Percentage (%)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Subjects'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${context.raw}%`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Show student details modal for result sheet
+function showStudentDetailsModal() {
+    const selectedRounds = [];
+    document.querySelectorAll('#round-selection-list input:checked').forEach(checkbox => {
+        selectedRounds.push(checkbox.value);
+    });
+    
+    if (selectedRounds.length === 0) {
+        alert('Please select at least one round');
+        return;
+    }
+    
+    selectedRoundsForResult = selectedRounds;
+    hideModal('round-selection-modal');
+    
+    // Create student details modal HTML
+    const studentModalHTML = `
+        <div class="modal active" id="student-details-modal">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">Student Details</h3>
+                    <button class="modal-close" data-modal="student-details-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="student-name">Student Name</label>
+                        <input type="text" id="student-name" class="form-control" placeholder="Enter student name">
+                    </div>
+                    <div class="form-group">
+                        <label for="roll-number">Roll Number</label>
+                        <input type="text" id="roll-number" class="form-control" placeholder="Enter roll number">
+                    </div>
+                    <div class="form-group">
+                        <label for="school-name">School Name</label>
+                        <input type="text" id="school-name" class="form-control" placeholder="Enter school name">
+                    </div>
+                    <div class="form-group">
+                        <label for="student-image">Student Photo</label>
+                        <input type="file" id="student-image" class="form-control" accept="image/*">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-warning" data-modal="student-details-modal">Cancel</button>
+                    <button class="btn btn-success" id="generate-result-btn">Generate Result Sheet</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add modal to DOM
+    document.body.insertAdjacentHTML('beforeend', studentModalHTML);
+    
+    // Setup event listeners
+    document.querySelector('#student-details-modal .modal-close').addEventListener('click', () => {
+        hideModal('student-details-modal');
+    });
+    
+    document.querySelector('#student-details-modal .btn-warning').addEventListener('click', () => {
+        hideModal('student-details-modal');
+    });
+    
+    document.getElementById('generate-result-btn').addEventListener('click', generateResultSheet);
+}
+
+// Generate result sheet in PDF format
+function generateResultSheet() {
+    const studentName = document.getElementById('student-name').value.trim();
+    const rollNumber = document.getElementById('roll-number').value.trim();
+    const schoolName = document.getElementById('school-name').value.trim();
+    const imageFile = document.getElementById('student-image').files[0];
+    
+    if (!studentName || !rollNumber || !schoolName) {
+        alert('Please fill all student details');
+        return;
+    }
+    
+    hideModal('student-details-modal');
+    
+    // Create result sheet HTML
+    const resultHTML = createResultSheetHTML(studentName, rollNumber, schoolName, imageFile);
+    
+    // Use html2canvas to capture the result sheet
+    html2canvas(document.createElement('div')).then(canvas => {
+        // Create temporary div for rendering
+        const tempDiv = document.createElement('div');
+        tempDiv.style.position = 'absolute';
+        tempDiv.style.left = '-9999px';
+        tempDiv.style.top = '-9999px';
+        tempDiv.style.width = '794px'; // A4 width in pixels
+        tempDiv.style.padding = '20px';
+        tempDiv.style.backgroundColor = 'white';
+        tempDiv.innerHTML = resultHTML;
+        document.body.appendChild(tempDiv);
+        
+        // Capture and download
+        html2canvas(tempDiv, {
+            scale: 2,
+            useCORS: true,
+            logging: false
+        }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `Result_Sheet_${studentName}_${rollNumber}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            document.body.removeChild(tempDiv);
+        });
+    });
+}
+
+// Create result sheet HTML structure
+function createResultSheetHTML(studentName, rollNumber, schoolName, imageFile) {
+    let imageSrc = '';
+    if (imageFile) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            imageSrc = e.target.result;
+        };
+        reader.readAsDataURL(imageFile);
+    }
+    
+    return `
+        <div class="result-sheet" style="font-family: Arial, sans-serif; padding: 20px; max-width: 794px; margin: 0 auto;">
+            <!-- Header -->
+            <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px;">
+                <h1 style="color: #1834c1; margin: 0;">ACADEMIC PERFORMANCE REPORT</h1>
+                <h3 style="color: #666; margin: 5px 0;">${schoolName}</h3>
+            </div>
+            
+            <!-- Student Info -->
+            <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                <div>
+                    <p><strong>Student Name:</strong> ${studentName}</p>
+                    <p><strong>Roll Number:</strong> ${rollNumber}</p>
+                    <p><strong>School:</strong> ${schoolName}</p>
+                </div>
+                ${imageSrc ? `<div><img src="${imageSrc}" style="width: 100px; height: 120px; object-fit: cover; border: 1px solid #ddd;"></div>` : ''}
+            </div>
+            
+            <!-- Round-wise Results -->
+            ${selectedRoundsForResult.map(roundId => {
+                const round = findFolderById(roundId);
+                if (!round) return '';
+                
+                const roundMarks = collectAllMarks([round]);
+                const totalMarks = roundMarks.reduce((sum, m) => sum + m.totalMarks, 0);
+                const obtainedMarks = roundMarks.reduce((sum, m) => sum + m.marksObtained, 0);
+                const percentage = totalMarks > 0 ? ((obtainedMarks / totalMarks) * 100).toFixed(2) : 0;
+                
+                return `
+                    <div style="margin-bottom: 30px;">
+                        <h3 style="background: #1834c1; color: white; padding: 10px; margin: 0;">${round.name}</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 0;">
+                            <thead>
+                                <tr style="background: #f5f5f5;">
+                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Subject</th>
+                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Marks Obtained</th>
+                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Total Marks</th>
+                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Percentage</th>
+                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Grade</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${roundMarks.map(mark => {
+                                    const markPercentage = mark.totalMarks > 0 ? ((mark.marksObtained / mark.totalMarks) * 100).toFixed(2) : 0;
+                                    const grade = getGrade(markPercentage);
+                                    return `
+                                        <tr>
+                                            <td style="border: 1px solid #ddd; padding: 8px;">${mark.subject}</td>
+                                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${mark.marksObtained}</td>
+                                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${mark.totalMarks}</td>
+                                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${markPercentage}%</td>
+                                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${grade}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                                <tr style="background: #f9f9f9; font-weight: bold;">
+                                    <td style="border: 1px solid #ddd; padding: 8px;" colspan="2">Total</td>
+                                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${obtainedMarks}</td>
+                                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${totalMarks}</td>
+                                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${percentage}%</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }).join('')}
+            
+            <!-- Footer -->
+            <div style="margin-top: 30px; border-top: 2px solid #333; padding-top: 10px; text-align: center;">
+                <p style="color: #666; font-size: 12px;">Generated on ${new Date().toLocaleDateString()}</p>
+            </div>
+        </div>
+    `;
+}
+
+// Helper function to calculate grade
+function getGrade(percentage) {
+    if (percentage >= 90) return 'A+';
+    if (percentage >= 80) return 'A';
+    if (percentage >= 70) return 'B+';
+    if (percentage >= 60) return 'B';
+    if (percentage >= 50) return 'C';
+    if (percentage >= 40) return 'D';
+    return 'F';
+}
+
+// Update marks table to show per round
+function renderMarksTablePerRound(selectedFolderId = "all") {
+    const tableBody = document.getElementById("marks-table-body");
+    const emptyState = document.getElementById("empty-marks");
+    tableBody.innerHTML = "";
+
+    let marksToShow = [];
+
+    if (selectedFolderId === "all") {
+        marksToShow = collectAllMarks(folders);
+    } else {
+        const folder = findFolderById(selectedFolderId);
+        if (folder) {
+            marksToShow = collectAllMarks([folder]);
+        }
+    }
+
+    if (marksToShow.length === 0) {
+        emptyState.style.display = "block";
+        return;
+    } else {
+        emptyState.style.display = "none";
+    }
+
+    marksToShow.forEach(mark => {
+        const folderName = getFolderName(mark.folderId);
+        const percentage = mark.totalMarks > 0 ? ((mark.marksObtained / mark.totalMarks) * 100).toFixed(2) : "0.00";
+        let percentageClass = "low";
+        if (percentage >= 75) percentageClass = "high";
+        else if (percentage >= 40) percentageClass = "medium";
+
+        let formattedDate = "";
+        if (mark.date) {
+            const dateObj = new Date(mark.date);
+            formattedDate = !isNaN(dateObj) ? dateObj.toLocaleDateString() : mark.date;
+        }
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${mark.subject || "Unnamed Subject"}</td>
+            <td>${mark.marksObtained || 0}</td>
+            <td>${mark.totalMarks || 0}</td>
+            <td><span class="percentage ${percentageClass}">${percentage}%</span></td>
+            <td>${formattedDate}</td>
+            <td>${folderName}</td>
+            <td>
+                <button class="action-btn edit" onclick="editMark('${mark.folderId}', '${mark.id}')">✏️</button>
+                <button class="action-btn delete" onclick="deleteMark('${mark.folderId}', '${mark.id}')">🗑️</button>
+            </td>
+        `;
+        tableBody.appendChild(tr);
+    });
+}
+
+// Update event listeners
+function setupChartAndResultListeners() {
+    // Update download chart button
+    document.getElementById('download-report-btn')?.addEventListener('click', showRoundSelectionForChart);
+    
+    // Add download result sheet button
+    const downloadResultBtn = document.createElement('button');
+    downloadResultBtn.className = 'btn btn-info download-btn';
+    downloadResultBtn.id = 'download-result-btn';
+    downloadResultBtn.textContent = 'Download Result Sheet';
+    downloadResultBtn.style.marginLeft = '10px';
+    
+    const progressReport = document.querySelector('.progress-report');
+    if (progressReport) {
+        progressReport.querySelector('.download-btn').insertAdjacentElement('afterend', downloadResultBtn);
+    }
+    
+    document.getElementById('download-result-btn')?.addEventListener('click', showRoundSelectionForResult);
+    
+    // Update generate chart button in modal
+    document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
+}
+
+// Initialize the new functionality
+function initChartAndResultFeatures() {
+    setupChartAndResultListeners();
+}
+
+
+// Show round selection modal for result sheet
+function showRoundSelectionForResult() {
+    const container = document.getElementById('round-selection-list');
+    container.innerHTML = '';
+    
+    folders.forEach(round => {
+        const div = document.createElement('div');
+        div.className = 'round-selection-item';
+        div.style.marginBottom = '10px';
+        div.style.padding = '8px';
+        div.style.border = '1px solid #ddd';
+        div.style.borderRadius = '4px';
+        
+        div.innerHTML = `
+            <input type="checkbox" id="result-round-${round.id}" value="${round.id}" 
+                   ${selectedRoundsForResult.includes(round.id) ? 'checked' : ''}>
+            <label for="result-round-${round.id}" style="margin-left: 8px; cursor: pointer;">
+                ${round.name} (${getMarksCount(round)} marks)
+            </label>
+        `;
+        
+        container.appendChild(div);
+    });
+    
+    showModal('round-selection-modal');
+    
+    // Update modal title and button for result
+    document.querySelector('#round-selection-modal .modal-title').textContent = 'Select Rounds for Result Sheet';
+    document.getElementById('generate-chart-btn').textContent = 'Generate Result Sheet';
+    document.getElementById('generate-chart-btn').onclick = showStudentDetailsModal;
 }
 
 async function changePassword() {
