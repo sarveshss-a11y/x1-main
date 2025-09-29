@@ -642,6 +642,36 @@ body.dark-mode #average-percentage {
             font-weight: 600;
         }
 
+        .subject-tag {
+    display: inline-flex;
+    align-items: center;
+    background: var(--primary);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    margin: 2px;
+    font-size: 0.8rem;
+}
+
+.delete-subject {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border: none;
+    color: white !important;
+    margin-left: 5px !important;
+    cursor: pointer;
+    font-size: 14px !important;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.delete-subject:hover {
+    background: rgba(255, 255, 255, 0.5) !important;
+}
+
         .marks-table tr:hover {
             background-color: rgba(67, 97, 238, 0.05);
         }
@@ -2122,19 +2152,13 @@ async function createFolder() {
 
     try {
         const result = await dataAPI.createFolder(name);
-        const newFolder = result.folder;
-
-        folders.push(newFolder);    // add to local state
-        renderFolders();            // re-render folder list in sidebar
-        updateFolderDropdown();     // 🔥 update dropdown immediately
-
-        document.getElementById("folderName").value = ""; // clear input
+        await loadUserData();
+        document.getElementById("folderName").value = "";
     } catch (err) {
         console.error("Error creating folder:", err);
         alert("Failed to create folder: " + err.message);
     }
 }
-
 
 
 
@@ -2217,13 +2241,13 @@ checkToken();
 
 
 async function deleteFolder(folderId) {
-    if (!confirm("Delete this folder?")) return;
+    if (!confirm("Delete this folder and all its marks?")) return;
     await dataAPI.deleteFolder(folderId);
     await loadUserData();
 }
 
 function editFolder(folderId) {
-    const folder = findFolderById(folderId, folders);
+    const folder = folders.find(f => f.id === folderId);
     if (!folder) return;
 
     const newName = prompt("Enter new folder name:", folder.name);
@@ -2231,7 +2255,7 @@ function editFolder(folderId) {
 
     dataAPI.updateFolder(folderId, { name: newName })
         .then(() => loadUserData())
-        .catch(err => console.error("❌ Error editing folder:", err));
+        .catch(err => console.error("Error editing folder:", err));
 }
 
 // Recursive helper to find a folder by ID
@@ -2374,16 +2398,16 @@ function deleteMarks(markId) {
 }
 
 function filterMarksByFolder() {
-    const selectedFolderId = document.getElementById("folder-select").value;
-    renderMarksTable(selectedFolderId);
+    const selectedValue = document.getElementById("folder-select").value;
     
-    // Also update chart if we have selected rounds
-    if (selectedRoundsForChart.length > 0 && selectedFolderId === "all") {
-        renderMultiRoundChart(selectedRoundsForChart);
-    } else if (selectedFolderId !== "all") {
-        // Show chart for single folder
-        renderMultiRoundChart([selectedFolderId]);
+    if (selectedValue === "all") {
+        selectedFolderId = null; // Show all folders
+    } else {
+        selectedFolderId = selectedValue; // Show specific folder
     }
+    
+    renderMarksTable();
+    renderChart();
 }
 
 
@@ -2723,8 +2747,7 @@ function createResultSheetHTML(studentName, rollNumber, schoolName, imageDataURL
             <div style="margin-left: 20px;">
                 <img src="${imageDataURL}" 
                      style="width: 100px; height: 120px; object-fit: cover; border: 1px solid #ddd; border-radius: 4px;" 
-                     alt="Student Photo"
-                     onerror="this.style.display='none'">
+                     alt="Student Photo">
             </div>
         `;
     }
@@ -2750,10 +2773,10 @@ function createResultSheetHTML(studentName, rollNumber, schoolName, imageDataURL
             
             <!-- Round-wise Results -->
             ${selectedRoundsForResult.map(roundId => {
-                const round = findFolderById(roundId);
+                const round = folders.find(f => f.id === roundId);
                 if (!round) return '';
                 
-                const roundMarks = collectAllMarks([round]);
+                const roundMarks = round.marks || [];
                 
                 if (roundMarks.length === 0) {
                     return `
@@ -3021,76 +3044,52 @@ async function deleteAccount() {
     function renderFolders() {
     const sidebar = document.getElementById('folders-list');
     if (!sidebar) return;
+    
     sidebar.innerHTML = '';
 
-    if (!folders || !folders.length) {
+    if (!folders || folders.length === 0) {
         sidebar.innerHTML = '<p class="no-folders-message">No folders available</p>';
         return;
     }
 
-    function render(folder, parentEl, level = 0) {
-        const item = document.createElement('div');
-        item.className = 'folder-item';
-        item.style.paddingLeft = `${level * 12}px`;
-
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = folder.name;
-        item.appendChild(nameSpan);
-
-        const actions = document.createElement('div');
-        actions.className = 'folder-actions';
-
-        const editBtn = document.createElement('button');
-        editBtn.className = 'edit-folder';
-        editBtn.textContent = '✏️';
-        editBtn.addEventListener('click', (e) => { e.stopPropagation(); editFolder(folder.id); });
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'delete-folder';
-        delBtn.textContent = '🗑️';
-        delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteFolder(folder.id); });
-
-        actions.appendChild(editBtn);
-        actions.appendChild(delBtn);
-        item.appendChild(actions);
-
-        // Enhanced click handler
-       // Update the folder click handler in renderFolders function:
-item.addEventListener('click', () => {
-    selectedFolderId = folder.id;
-    
-    // Update folder select dropdown
-    const folderSelect = document.getElementById('folder-select');
-    if (folderSelect) folderSelect.value = folder.id;
-    
-    // Update marks folder dropdown
-    const marksFolder = document.getElementById('marks-folder');
-    if (marksFolder) marksFolder.value = folder.id;
-    
-    // Highlight active folder
-    const allFolderEls = sidebar.querySelectorAll('.folder-item');
-    allFolderEls.forEach(el => el.classList.remove('active-folder'));
-    item.classList.add('active-folder');
-    
-    // Render marks for this folder only
-    renderMarksTable(folder.id);
-    
-    // Render chart for this folder
-    if (selectedRoundsForChart.length > 0) {
-        renderMultiRoundChart(selectedRoundsForChart);
-    } else {
-        renderMultiRoundChart([folder.id]);
-    }
-});
-
-        parentEl.appendChild(item);
-
-        if (folder.subfolders && folder.subfolders.length) {
-            folder.subfolders.forEach(sf => render(sf, parentEl, level + 1));
+    folders.forEach(folder => {
+        const folderItem = document.createElement('div');
+        folderItem.className = 'folder-item';
+        if (selectedFolderId === folder.id) {
+            folderItem.classList.add('active-folder');
         }
-    }
 
-    folders.forEach(f => render(f, sidebar, 0));
+        // Calculate folder stats
+        const folderMarks = folder.marks || [];
+        const totalMarks = folderMarks.reduce((sum, m) => sum + (m.totalMarks || 0), 0);
+        const obtainedMarks = folderMarks.reduce((sum, m) => sum + (m.marksObtained || 0), 0);
+        const percentage = totalMarks > 0 ? ((obtainedMarks / totalMarks) * 100).toFixed(1) : 0;
+
+        folderItem.innerHTML = `
+            <div style="flex: 1; display: flex; justify-content: space-between; align-items: center;">
+                <span>${folder.name}</span>
+                <span style="font-size: 0.8rem; color: #ccc;">
+                    ${folderMarks.length} marks • ${percentage}%
+                </span>
+            </div>
+            <div class="folder-actions">
+                <button onclick="editFolder('${folder.id}')">✏️</button>
+                <button onclick="deleteFolder('${folder.id}')">🗑️</button>
+            </div>
+        `;
+
+        // Click to select folder
+        folderItem.addEventListener('click', (e) => {
+            if (!e.target.closest('.folder-actions')) {
+                selectedFolderId = folder.id;
+                renderFolders();
+                renderMarksTable();
+                renderChart();
+            }
+        });
+
+        sidebar.appendChild(folderItem);
+    });
 }
 
 
@@ -3612,6 +3611,57 @@ function renderChart() {
             scales: { y: { beginAtZero: true, max: 100 } }
         }
     });
+}function renderChart() {
+    const ctx = document.getElementById('progress-chart').getContext('2d');
+    if (chart) chart.destroy();
+
+    let marksToShow = [];
+
+    if (selectedFolderId) {
+        const folder = folders.find(f => f.id === selectedFolderId);
+        marksToShow = folder ? (folder.marks || []) : [];
+    } else {
+        marksToShow = folders.flatMap(folder => folder.marks || []);
+    }
+
+    const labels = marksToShow.map(m => m.subject);
+    const percentages = marksToShow.map(m => 
+        m.totalMarks > 0 ? ((m.marksObtained / m.totalMarks) * 100).toFixed(2) : 0
+    );
+
+    chart = new Chart(ctx, {
+        type: chartType,
+        data: {
+            labels,
+            datasets: [{
+                label: 'Percentage',
+                data: percentages,
+                backgroundColor: percentages.map(p =>
+                    p >= 75 ? 'rgba(6,214,160,0.7)' :
+                    p >= 40 ? 'rgba(255,209,102,0.7)' :
+                              'rgba(239,71,111,0.7)'
+                ),
+                borderColor: 'rgba(0,0,0,0.1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const mark = marksToShow[context.dataIndex];
+                            return `${mark.marksObtained}/${mark.totalMarks} (${context.raw}%)`;
+                        }
+                    }
+                }
+            },
+            scales: { y: { beginAtZero: true, max: 100 } }
+        }
+    });
 }
 
 
@@ -3919,42 +3969,38 @@ function findFolderInSubfolders(folder, targetId) {
 
 // Replace the renderMarksTable function with this:
 // ✅ Render marks into the table
-function renderMarksTable(selectedFolderId = "all") {
+function renderMarksTable() {
     const tableBody = document.getElementById("marks-table-body");
     const emptyState = document.getElementById("empty-marks");
     
-    if (!tableBody) {
-        console.error('Marks table body not found');
-        return;
-    }
+    if (!tableBody) return;
     
     tableBody.innerHTML = "";
 
     let marksToShow = [];
 
-    if (selectedFolderId === "all") {
-        // Show all marks from all folders
-        marksToShow = collectAllMarks(folders);
+    if (selectedFolderId) {
+        // Show marks from selected folder only
+        const folder = folders.find(f => f.id === selectedFolderId);
+        marksToShow = folder ? (folder.marks || []) : [];
     } else {
-        // Show marks only from the selected folder
-        const folder = findFolderById(selectedFolderId);
-        if (folder) {
-            marksToShow = collectAllMarks([folder]);
-        } else {
-            console.error('Folder not found:', selectedFolderId);
-        }
+        // Show all marks from all folders
+        marksToShow = folders.flatMap(folder => folder.marks || []);
     }
 
     // Show empty state if no marks
     if (marksToShow.length === 0) {
         if (emptyState) emptyState.style.display = "block";
+        if (tableBody.closest('table')) tableBody.closest('table').style.display = "none";
         return;
     } else {
         if (emptyState) emptyState.style.display = "none";
+        if (tableBody.closest('table')) tableBody.closest('table').style.display = "table";
     }
 
     marksToShow.forEach(mark => {
-        const folderName = getFolderName(mark.folderId);
+        const folder = folders.find(f => f.id === mark.folderId);
+        const folderName = folder ? folder.name : "Unknown Folder";
         const percentage = mark.totalMarks > 0 ? 
             ((mark.marksObtained / mark.totalMarks) * 100).toFixed(2) : "0.00";
         
@@ -3994,22 +4040,17 @@ function renderSubjects() {
     if (container) {
         container.innerHTML = '';
         
-        // Render subject tags
+        // Render subject tags with delete buttons
         customSubjects.forEach(subject => {
             const tag = document.createElement('span');
             tag.className = 'subject-tag';
-            tag.textContent = subject;
-            
-            const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = '×';
-            deleteBtn.style.background = 'none';
-            deleteBtn.style.border = 'none';
-            deleteBtn.style.color = 'white';
-            deleteBtn.style.marginLeft = '5px';
-            deleteBtn.style.cursor = 'pointer';
-            deleteBtn.onclick = () => removeSubject(subject);
-            
-            tag.appendChild(deleteBtn);
+            tag.innerHTML = `
+                ${subject}
+                <button class="delete-subject" onclick="removeSubject('${subject}')" 
+                        style="background: none; border: none; color: white; margin-left: 5px; cursor: pointer; font-size: 12px;">
+                    ×
+                </button>
+            `;
             container.appendChild(tag);
         });
     }
@@ -4029,6 +4070,8 @@ function renderSubjects() {
         }
     }
 }
+
+
 function initAppUpdates() {
     // Load custom subjects
     customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
@@ -4067,10 +4110,15 @@ function addSubject(subjectName = null) {
 }
 
 function removeSubject(subject) {
-    customSubjects = customSubjects.filter(s => s !== subject);
-    localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
-    renderSubjects();
+    if (confirm(`Delete subject "${subject}"?`)) {
+        customSubjects = customSubjects.filter(s => s !== subject);
+        localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+        renderSubjects();
+    }
 }
+
+// Helper function to show temporary messages
+
 
 // Add to setupEventListeners:
 
@@ -4125,41 +4173,28 @@ function editMark(folderId, markId) {
 // 📂 POPULATE FOLDER SELECT DROPDOWN
 // ===============================
 function populateFolderSelect() {
-  const currentFolderSelect = document.getElementById('marks-folder');
-  const folderFilterSelect = document.getElementById('folder-select');
+    const marksFolderSelect = document.getElementById('marks-folder');
+    const filterFolderSelect = document.getElementById('folder-select');
 
-  if (!currentFolderSelect || !folderFilterSelect) return;
+    if (marksFolderSelect) {
+        marksFolderSelect.innerHTML = '<option value="">Select a folder</option>';
+        folders.forEach(folder => {
+            const option = document.createElement('option');
+            option.value = folder.id;
+            option.textContent = folder.name;
+            marksFolderSelect.appendChild(option);
+        });
+    }
 
-  // clear
-  currentFolderSelect.innerHTML = '<option value="">Select a folder</option>';
-  folderFilterSelect.innerHTML = '<option value="all">All Folders</option>';
-
-  // add nested options with prefix
-  function addOptions(list, prefix = '') {
-    list.forEach(f => {
-      const opt = document.createElement('option');
-      opt.value = f.id;
-      opt.textContent = prefix + f.name;
-      currentFolderSelect.appendChild(opt);
-
-      const opt2 = document.createElement('option');
-      opt2.value = f.id;
-      opt2.textContent = prefix + f.name;
-      folderFilterSelect.appendChild(opt2);
-
-      if (f.subfolders && f.subfolders.length) {
-        addOptions(f.subfolders, prefix + '-- ');
-      }
-    });
-  }
-
-  if (Array.isArray(folders) && folders.length) addOptions(folders);
-  else {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'No folders available';
-    currentFolderSelect.appendChild(opt);
-  }
+    if (filterFolderSelect) {
+        filterFolderSelect.innerHTML = '<option value="all">All Folders</option>';
+        folders.forEach(folder => {
+            const option = document.createElement('option');
+            option.value = folder.id;
+            option.textContent = folder.name;
+            filterFolderSelect.appendChild(option);
+        });
+    }
 }
 
 function updateMarksForm() {
