@@ -1854,7 +1854,7 @@ async function checkApiConnection() {
 function initApp() {
     // Load theme preference first
     loadThemePreference();
-    
+    initAppUpdates();
     // Setup password toggles
     setupPasswordToggles();
         renderSubjects();
@@ -2659,29 +2659,49 @@ function renderFolderRecursive(folder, container) {
 // ✅ Add marks to database
 // Add marks from form to database
 async function addMarks() {
-  const folderId = document.getElementById('marks-folder').value;
-  const subject = document.getElementById('subject').value.trim();
-  const marksObtained = Number(document.getElementById('marks-obtained').value);
-  const totalMarks = Number(document.getElementById('total-marks').value);
-  const date = document.getElementById('marks-date').value || '';
+    const folderId = document.getElementById('marks-folder').value;
+    const subjectSelect = document.getElementById('subject');
+    const subject = subjectSelect ? subjectSelect.value.trim() : '';
+    const marksObtained = Number(document.getElementById('marks-obtained').value);
+    const totalMarks = Number(document.getElementById('total-marks').value);
+    const date = document.getElementById('marks-date').value || '';
 
-  if (!folderId || !subject || isNaN(marksObtained) || isNaN(totalMarks)) {
-    alert('Please fill all fields correctly.');
-    return;
-  }
+    if (!folderId || !subject || isNaN(marksObtained) || isNaN(totalMarks)) {
+        alert('Please fill all fields correctly.');
+        return;
+    }
 
-  try {
-    await dataAPI.addMarks(folderId, { subject, marksObtained, totalMarks, date });
-    // clear form
-    document.getElementById('subject').value = '';
-    document.getElementById('marks-obtained').value = '';
-    document.getElementById('total-marks').value = '';
-    // refresh everything from server (keeps server as source-of-truth)
-    await loadUserData();
-  } catch (err) {
-    console.error('Error adding marks:', err);
-    alert('Failed to add marks: ' + (err.message || err));
-  }
+    // If subject is "other", prompt for new subject
+    let finalSubject = subject;
+    if (subject === 'other') {
+        const newSubject = prompt('Enter new subject name:');
+        if (!newSubject || !newSubject.trim()) {
+            alert('Subject name is required.');
+            return;
+        }
+        finalSubject = newSubject.trim();
+        addSubject(finalSubject);
+    }
+
+    try {
+        await dataAPI.addMarks(folderId, { 
+            subject: finalSubject, 
+            marksObtained, 
+            totalMarks, 
+            date 
+        });
+        
+        // Clear form
+        if (subjectSelect) subjectSelect.value = '';
+        document.getElementById('marks-obtained').value = '';
+        document.getElementById('total-marks').value = '';
+        
+        // Refresh data
+        await loadUserData();
+    } catch (err) {
+        console.error('Error adding marks:', err);
+        alert('Failed to add marks: ' + (err.message || err));
+    }
 }
 
 
@@ -3375,48 +3395,78 @@ function renderSubjects() {
     const container = document.getElementById('subjects-list');
     const subjectSelect = document.getElementById('subject');
     
-    container.innerHTML = '';
-    
-    // Update subject dropdown
-    if (subjectSelect) {
-        subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+    if (container) {
+        container.innerHTML = '';
+        
+        // Render subject tags
         customSubjects.forEach(subject => {
-            const option = document.createElement('option');
-            option.value = subject;
-            option.textContent = subject;
-            subjectSelect.appendChild(option);
+            const tag = document.createElement('span');
+            tag.className = 'subject-tag';
+            tag.textContent = subject;
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '×';
+            deleteBtn.style.background = 'none';
+            deleteBtn.style.border = 'none';
+            deleteBtn.style.color = 'white';
+            deleteBtn.style.marginLeft = '5px';
+            deleteBtn.style.cursor = 'pointer';
+            deleteBtn.onclick = () => removeSubject(subject);
+            
+            tag.appendChild(deleteBtn);
+            container.appendChild(tag);
         });
     }
     
-    // Render subject tags
-    customSubjects.forEach(subject => {
-        const tag = document.createElement('span');
-        tag.className = 'subject-tag';
-        tag.textContent = subject;
+    // Update subject dropdown in marks form
+    if (subjectSelect && subjectSelect.tagName === 'SELECT') {
+        const currentValue = subjectSelect.value;
+        subjectSelect.innerHTML = `
+            <option value="">Select Subject</option>
+            ${customSubjects.map(subject => `<option value="${subject}">${subject}</option>`).join('')}
+            <option value="other">Other (Add New)</option>
+        `;
         
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '×';
-        deleteBtn.style.background = 'none';
-        deleteBtn.style.border = 'none';
-        deleteBtn.style.color = 'white';
-        deleteBtn.style.marginLeft = '5px';
-        deleteBtn.style.cursor = 'pointer';
-        deleteBtn.onclick = () => removeSubject(subject);
-        
-        tag.appendChild(deleteBtn);
-        container.appendChild(tag);
-    });
+        // Restore previous selection if it still exists
+        if (currentValue && customSubjects.includes(currentValue)) {
+            subjectSelect.value = currentValue;
+        }
+    }
+}
+function initAppUpdates() {
+    // Load custom subjects
+    customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
+    
+    // Update marks form with subject dropdown
+    updateMarksForm();
+    
+    // Remove marks from unauthorized pages
+    removeMarksFromUnauthorizedPages();
+    
+    // Render subjects
+    renderSubjects();
 }
 
-function addSubject() {
-    const subjectInput = document.getElementById('new-subject');
-    const subject = subjectInput.value.trim();
+
+function addSubject(subjectName = null) {
+    let subject = subjectName;
+    
+    if (!subject) {
+        const subjectInput = document.getElementById('new-subject');
+        subject = subjectInput ? subjectInput.value.trim() : '';
+    }
     
     if (subject && !customSubjects.includes(subject)) {
         customSubjects.push(subject);
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
         renderSubjects();
-        subjectInput.value = '';
+        updateMarksForm(); // Update the dropdown in marks form
+        
+        if (!subjectName) {
+            // Clear input only if called from the button
+            const subjectInput = document.getElementById('new-subject');
+            if (subjectInput) subjectInput.value = '';
+        }
     }
 }
 
@@ -3516,7 +3566,63 @@ function populateFolderSelect() {
   }
 }
 
+function updateMarksForm() {
+    // Replace the subject input with a dropdown
+    const marksForm = document.querySelector('.marks-form');
+    if (marksForm) {
+        const subjectInput = marksForm.querySelector('#subject');
+        if (subjectInput && subjectInput.type === 'text') {
+            const select = document.createElement('select');
+            select.id = 'subject';
+            select.className = 'form-control';
+            select.innerHTML = `
+                <option value="">Select Subject</option>
+                ${customSubjects.map(subject => `<option value="${subject}">${subject}</option>`).join('')}
+                <option value="other">Other (Add New)</option>
+            `;
+            
+            // Add event listener for "Other" option
+            select.addEventListener('change', function() {
+                if (this.value === 'other') {
+                    const newSubject = prompt('Enter new subject name:');
+                    if (newSubject && newSubject.trim()) {
+                        addSubject(newSubject.trim());
+                        // Update dropdown and select the new subject
+                        renderSubjects();
+                        select.value = newSubject;
+                    } else {
+                        select.value = '';
+                    }
+                }
+            });
+            
+            subjectInput.parentNode.replaceChild(select, subjectInput);
+        }
+    }
+}
 
+function removeMarksFromUnauthorizedPages() {
+    // Remove from login page
+    const loginPage = document.getElementById('login-page');
+    if (loginPage) {
+        const loginMarksForm = loginPage.querySelector('.marks-form');
+        if (loginMarksForm) loginMarksForm.remove();
+    }
+    
+    // Remove from settings page
+    const settingsPage = document.getElementById('settings-page');
+    if (settingsPage) {
+        const settingsMarksForm = settingsPage.querySelector('.marks-form');
+        if (settingsMarksForm) settingsMarksForm.remove();
+    }
+    
+    // Remove from main page footer (if exists)
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        const footerMarks = mainContent.querySelector('footer .marks-form');
+        if (footerMarks) footerMarks.remove();
+    }
+}
 
 
 // Add this function to help debug
