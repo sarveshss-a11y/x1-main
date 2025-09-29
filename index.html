@@ -1948,6 +1948,8 @@ function backupDataLocally() {
 // Call backupDataLocally() after any data modification
 // Event Listeners
 function setupEventListeners() {
+    document.getElementById('download-report-btn')?.addEventListener('click', showRoundSelectionModal);
+document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
     document.getElementById('retry-api-btn')?.addEventListener('click', checkApiConnection);
 
   // ---------------- Auth navigation ----------------
@@ -2370,6 +2372,14 @@ function deleteMarks(markId) {
 function filterMarksByFolder() {
     const selectedFolderId = document.getElementById("folder-select").value;
     renderMarksTable(selectedFolderId);
+    
+    // Also update chart if we have selected rounds
+    if (selectedRoundsForChart.length > 0 && selectedFolderId === "all") {
+        renderMultiRoundChart(selectedRoundsForChart);
+    } else if (selectedFolderId !== "all") {
+        // Show chart for single folder
+        renderMultiRoundChart([selectedFolderId]);
+    }
 }
 
 
@@ -2606,6 +2616,7 @@ function showStudentDetailsModal() {
 }
 
 // Generate result sheet in PDF format
+// Fix for html2canvas error and chart generation issues
 function generateResultSheet() {
     const studentName = document.getElementById('student-name').value.trim();
     const rollNumber = document.getElementById('roll-number').value.trim();
@@ -2622,61 +2633,75 @@ function generateResultSheet() {
     // Create result sheet HTML
     const resultHTML = createResultSheetHTML(studentName, rollNumber, schoolName, imageFile);
     
-    // Use html2canvas to capture the result sheet
-    html2canvas(document.createElement('div')).then(canvas => {
-        // Create temporary div for rendering
-        const tempDiv = document.createElement('div');
-        tempDiv.style.position = 'absolute';
-        tempDiv.style.left = '-9999px';
-        tempDiv.style.top = '-9999px';
-        tempDiv.style.width = '794px'; // A4 width in pixels
-        tempDiv.style.padding = '20px';
-        tempDiv.style.backgroundColor = 'white';
-        tempDiv.innerHTML = resultHTML;
-        document.body.appendChild(tempDiv);
+    // Create a temporary container for html2canvas
+    const tempContainer = document.createElement('div');
+    tempContainer.style.position = 'fixed';
+    tempContainer.style.left = '0';
+    tempContainer.style.top = '0';
+    tempContainer.style.width = '794px';
+    tempContainer.style.height = '1123px'; // A4 height
+    tempContainer.style.padding = '40px';
+    tempContainer.style.backgroundColor = 'white';
+    tempContainer.style.zIndex = '10000';
+    tempContainer.style.overflow = 'hidden';
+    tempContainer.innerHTML = resultHTML;
+    
+    document.body.appendChild(tempContainer);
+    
+    // Use html2canvas with proper configuration
+    html2canvas(tempContainer, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        width: 794,
+        height: 1123,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: 794,
+        windowHeight: 1123
+    }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `Result_Sheet_${studentName}_${rollNumber}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
         
-        // Capture and download
-        html2canvas(tempDiv, {
-            scale: 2,
-            useCORS: true,
-            logging: false
-        }).then(canvas => {
-            const link = document.createElement('a');
-            link.download = `Result_Sheet_${studentName}_${rollNumber}.png`;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-            document.body.removeChild(tempDiv);
-        });
+        // Remove temporary container
+        document.body.removeChild(tempContainer);
+    }).catch(error => {
+        console.error('Error generating result sheet:', error);
+        alert('Error generating result sheet. Please try again.');
+        document.body.removeChild(tempContainer);
     });
 }
 
 // Create result sheet HTML structure
 function createResultSheetHTML(studentName, rollNumber, schoolName, imageFile) {
-    let imageSrc = '';
+    let imageHTML = '';
     if (imageFile) {
+        // For html2canvas, we need to use a data URL
         const reader = new FileReader();
-        reader.onload = function(e) {
-            imageSrc = e.target.result;
-        };
         reader.readAsDataURL(imageFile);
+        // Note: This is async, so we'll create a placeholder
+        imageHTML = '<div style="width: 100px; height: 120px; background: #f0f0f0; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; color: #666;">Photo</div>';
     }
     
     return `
-        <div class="result-sheet" style="font-family: Arial, sans-serif; padding: 20px; max-width: 794px; margin: 0 auto;">
+        <div class="result-sheet" style="font-family: Arial, sans-serif; padding: 40px; width: 794px; min-height: 1123px; background: white; box-sizing: border-box;">
             <!-- Header -->
-            <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px;">
-                <h1 style="color: #1834c1; margin: 0;">ACADEMIC PERFORMANCE REPORT</h1>
-                <h3 style="color: #666; margin: 5px 0;">${schoolName}</h3>
+            <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px;">
+                <h1 style="color: #1834c1; margin: 0; font-size: 28px;">ACADEMIC PERFORMANCE REPORT</h1>
+                <h3 style="color: #666; margin: 10px 0; font-size: 18px;">${schoolName}</h3>
             </div>
             
             <!-- Student Info -->
-            <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-                <div>
-                    <p><strong>Student Name:</strong> ${studentName}</p>
-                    <p><strong>Roll Number:</strong> ${rollNumber}</p>
-                    <p><strong>School:</strong> ${schoolName}</p>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 30px; align-items: flex-start;">
+                <div style="flex: 1;">
+                    <p style="margin: 8px 0;"><strong>Student Name:</strong> ${studentName}</p>
+                    <p style="margin: 8px 0;"><strong>Roll Number:</strong> ${rollNumber}</p>
+                    <p style="margin: 8px 0;"><strong>School:</strong> ${schoolName}</p>
+                    <p style="margin: 8px 0;"><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
                 </div>
-                ${imageSrc ? `<div><img src="${imageSrc}" style="width: 100px; height: 120px; object-fit: cover; border: 1px solid #ddd;"></div>` : ''}
+                ${imageHTML ? `<div style="margin-left: 20px;">${imageHTML}</div>` : ''}
             </div>
             
             <!-- Round-wise Results -->
@@ -2690,16 +2715,16 @@ function createResultSheetHTML(studentName, rollNumber, schoolName, imageFile) {
                 const percentage = totalMarks > 0 ? ((obtainedMarks / totalMarks) * 100).toFixed(2) : 0;
                 
                 return `
-                    <div style="margin-bottom: 30px;">
-                        <h3 style="background: #1834c1; color: white; padding: 10px; margin: 0;">${round.name}</h3>
-                        <table style="width: 100%; border-collapse: collapse; margin-top: 0;">
+                    <div style="margin-bottom: 40px; page-break-inside: avoid;">
+                        <h3 style="background: #1834c1; color: white; padding: 12px; margin: 0 0 15px 0; border-radius: 4px;">${round.name} - Performance Summary</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 0; font-size: 14px;">
                             <thead>
                                 <tr style="background: #f5f5f5;">
-                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Subject</th>
-                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Marks Obtained</th>
-                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Total Marks</th>
-                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Percentage</th>
-                                    <th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Grade</th>
+                                    <th style="border: 1px solid #ddd; padding: 12px; text-align: left; width: 30%;">Subject</th>
+                                    <th style="border: 1px solid #ddd; padding: 12px; text-align: center; width: 17.5%;">Marks Obtained</th>
+                                    <th style="border: 1px solid #ddd; padding: 12px; text-align: center; width: 17.5%;">Total Marks</th>
+                                    <th style="border: 1px solid #ddd; padding: 12px; text-align: center; width: 17.5%;">Percentage</th>
+                                    <th style="border: 1px solid #ddd; padding: 12px; text-align: center; width: 17.5%;">Grade</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2708,19 +2733,19 @@ function createResultSheetHTML(studentName, rollNumber, schoolName, imageFile) {
                                     const grade = getGrade(markPercentage);
                                     return `
                                         <tr>
-                                            <td style="border: 1px solid #ddd; padding: 8px;">${mark.subject}</td>
-                                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${mark.marksObtained}</td>
-                                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${mark.totalMarks}</td>
-                                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${markPercentage}%</td>
-                                            <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${grade}</td>
+                                            <td style="border: 1px solid #ddd; padding: 10px;">${mark.subject}</td>
+                                            <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${mark.marksObtained}</td>
+                                            <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${mark.totalMarks}</td>
+                                            <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${markPercentage}%</td>
+                                            <td style="border: 1px solid #ddd; padding: 10px; text-align: center; font-weight: bold;">${grade}</td>
                                         </tr>
                                     `;
                                 }).join('')}
                                 <tr style="background: #f9f9f9; font-weight: bold;">
-                                    <td style="border: 1px solid #ddd; padding: 8px;" colspan="2">Total</td>
-                                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${obtainedMarks}</td>
-                                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${totalMarks}</td>
-                                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${percentage}%</td>
+                                    <td style="border: 1px solid #ddd; padding: 12px;" colspan="2">Overall Total</td>
+                                    <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">${obtainedMarks}</td>
+                                    <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">${totalMarks}</td>
+                                    <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">${percentage}%</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -2729,8 +2754,9 @@ function createResultSheetHTML(studentName, rollNumber, schoolName, imageFile) {
             }).join('')}
             
             <!-- Footer -->
-            <div style="margin-top: 30px; border-top: 2px solid #333; padding-top: 10px; text-align: center;">
-                <p style="color: #666; font-size: 12px;">Generated on ${new Date().toLocaleDateString()}</p>
+            <div style="margin-top: 50px; border-top: 2px solid #333; padding-top: 20px; text-align: center;">
+                <p style="color: #666; font-size: 12px; margin: 5px 0;">Generated by Marks Explorer</p>
+                <p style="color: #666; font-size: 12px; margin: 5px 0;">${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</p>
             </div>
         </div>
     `;
@@ -2804,7 +2830,10 @@ function renderMarksTablePerRound(selectedFolderId = "all") {
 // Update event listeners
 function setupChartAndResultListeners() {
     // Update download chart button
-    document.getElementById('download-report-btn')?.addEventListener('click', showRoundSelectionForChart);
+    const downloadChartBtn = document.getElementById('download-report-btn');
+    if (downloadChartBtn) {
+        downloadChartBtn.addEventListener('click', showRoundSelectionForChart);
+    }
     
     // Add download result sheet button
     const downloadResultBtn = document.createElement('button');
@@ -2815,13 +2844,13 @@ function setupChartAndResultListeners() {
     
     const progressReport = document.querySelector('.progress-report');
     if (progressReport) {
-        progressReport.querySelector('.download-btn').insertAdjacentElement('afterend', downloadResultBtn);
+        const existingResultBtn = document.getElementById('download-result-btn');
+        if (!existingResultBtn) {
+            progressReport.querySelector('.download-btn').insertAdjacentElement('afterend', downloadResultBtn);
+        }
     }
     
     document.getElementById('download-result-btn')?.addEventListener('click', showRoundSelectionForResult);
-    
-    // Update generate chart button in modal
-    document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
 }
 
 // Initialize the new functionality
@@ -2936,62 +2965,74 @@ async function deleteAccount() {
 // 📂 RENDER FOLDERS IN SIDEBAR
 // ===============================
     function renderFolders() {
-  const sidebar = document.getElementById('folders-list');
-  if (!sidebar) return;
-  sidebar.innerHTML = '';
+    const sidebar = document.getElementById('folders-list');
+    if (!sidebar) return;
+    sidebar.innerHTML = '';
 
-  if (!folders || !folders.length) {
-    sidebar.innerHTML = '<p class="no-folders-message">No folders available</p>';
-    return;
-  }
-
-  function render(folder, parentEl, level = 0) {
-    const item = document.createElement('div');
-    item.className = 'folder-item';
-    item.style.paddingLeft = `${level * 12}px`;
-
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = folder.name;
-    item.appendChild(nameSpan);
-
-    const actions = document.createElement('div');
-    actions.className = 'folder-actions';
-
-    const editBtn = document.createElement('button');
-    editBtn.className = 'edit-folder';
-    editBtn.textContent = '✏️';
-    editBtn.addEventListener('click', (e) => { e.stopPropagation(); editFolder(folder.id); });
-
-    const delBtn = document.createElement('button');
-    delBtn.className = 'delete-folder';
-    delBtn.textContent = '🗑️';
-    delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteFolder(folder.id); });
-
-    actions.appendChild(editBtn);
-    actions.appendChild(delBtn);
-    item.appendChild(actions);
-
-    // click to select folder (for UI highlight if desired)
-    item.addEventListener('click', () => {
-      selectedFolderId = folder.id;
-      // optionally highlight; also select filter
-      const allFolderEls = sidebar.querySelectorAll('.folder-item');
-      allFolderEls.forEach(el => el.classList.remove('active-folder'));
-      item.classList.add('active-folder');
-      document.getElementById('folder-select').value = folder.id;
-      renderMarksTable(folder.id);
-    });
-
-    parentEl.appendChild(item);
-
-    if (folder.subfolders && folder.subfolders.length) {
-      folder.subfolders.forEach(sf => render(sf, parentEl, level + 1));
+    if (!folders || !folders.length) {
+        sidebar.innerHTML = '<p class="no-folders-message">No folders available</p>';
+        return;
     }
-  }
 
-  folders.forEach(f => render(f, sidebar, 0));
+    function render(folder, parentEl, level = 0) {
+        const item = document.createElement('div');
+        item.className = 'folder-item';
+        item.style.paddingLeft = `${level * 12}px`;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = folder.name;
+        item.appendChild(nameSpan);
+
+        const actions = document.createElement('div');
+        actions.className = 'folder-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-folder';
+        editBtn.textContent = '✏️';
+        editBtn.addEventListener('click', (e) => { e.stopPropagation(); editFolder(folder.id); });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-folder';
+        delBtn.textContent = '🗑️';
+        delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteFolder(folder.id); });
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        item.appendChild(actions);
+
+        // Enhanced click handler
+        item.addEventListener('click', () => {
+            selectedFolderId = folder.id;
+            
+            // Update folder select dropdown
+            const folderSelect = document.getElementById('folder-select');
+            if (folderSelect) folderSelect.value = folder.id;
+            
+            // Update marks folder dropdown
+            const marksFolder = document.getElementById('marks-folder');
+            if (marksFolder) marksFolder.value = folder.id;
+            
+            // Highlight active folder
+            const allFolderEls = sidebar.querySelectorAll('.folder-item');
+            allFolderEls.forEach(el => el.classList.remove('active-folder'));
+            item.classList.add('active-folder');
+            
+            // Render marks for this folder only
+            renderMarksTable(folder.id);
+            
+            // Render chart for this folder
+            renderMultiRoundChart([folder.id]);
+        });
+
+        parentEl.appendChild(item);
+
+        if (folder.subfolders && folder.subfolders.length) {
+            folder.subfolders.forEach(sf => render(sf, parentEl, level + 1));
+        }
+    }
+
+    folders.forEach(f => render(f, sidebar, 0));
 }
-
 
 
 
@@ -3350,72 +3391,101 @@ function generateMultiRoundChart() {
 }
 
 function renderMultiRoundChart(roundIds) {
-    const ctx = document.getElementById('progress-chart').getContext('2d');
+    const ctx = document.getElementById('progress-chart');
+    if (!ctx) {
+        console.error('Chart canvas not found');
+        return;
+    }
+    
+    const chartContext = ctx.getContext('2d');
     if (chart) chart.destroy();
     
-    const datasets = [];
-    const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+    // Clear any existing error
+    ctx.innerHTML = '';
     
-    roundIds.forEach((roundId, index) => {
+    // Get all unique subjects from selected rounds
+    const allSubjects = new Set();
+    const roundData = [];
+    
+    roundIds.forEach(roundId => {
         const round = findFolderById(roundId);
-        if (!round) return;
+        if (round) {
+            const roundMarks = collectAllMarks([round]);
+            roundMarks.forEach(mark => allSubjects.add(mark.subject));
+            roundData.push({ round, marks: roundMarks });
+        }
+    });
+    
+    const subjects = Array.from(allSubjects);
+    const datasets = [];
+    const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8ac6d1', '#ff6b6b'];
+    
+    roundData.forEach((data, index) => {
+        const round = data.round;
+        const roundMarks = data.marks;
         
-        const roundMarks = collectAllMarks([round]);
-        const subjects = [...new Set(roundMarks.map(m => m.subject))];
-        
-        const data = subjects.map(subject => {
+        const dataPoints = subjects.map(subject => {
             const subjectMarks = roundMarks.filter(m => m.subject === subject);
-            const avgPercentage = subjectMarks.length > 0 ? 
-                subjectMarks.reduce((sum, m) => sum + (m.marksObtained / m.totalMarks * 100), 0) / subjectMarks.length : 0;
-            return avgPercentage;
+            if (subjectMarks.length === 0) return 0;
+            
+            const avgPercentage = subjectMarks.reduce((sum, m) => 
+                sum + (m.marksObtained / m.totalMarks * 100), 0) / subjectMarks.length;
+            return Math.round(avgPercentage * 100) / 100;
         });
         
         datasets.push({
             label: round.name,
-            data: data,
+            data: dataPoints,
             backgroundColor: colors[index % colors.length],
             borderColor: colors[index % colors.length],
-            borderWidth: 1
+            borderWidth: 2
         });
     });
     
-    const allSubjects = [...new Set(roundIds.flatMap(id => {
-        const round = findFolderById(id);
-        return round ? collectAllMarks([round]).map(m => m.subject) : [];
-    }))];
-    
-    chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: allSubjects,
-            datasets: datasets
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100,
-                    title: {
-                        display: true,
-                        text: 'Percentage (%)'
+    try {
+        chart = new Chart(chartContext, {
+            type: 'bar',
+            data: {
+                labels: subjects,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Percentage (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Subjects'
+                        }
                     }
                 },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Subjects'
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.raw}%`;
+                            }
+                        }
                     }
                 }
             }
-        }
-    });
+        });
+    } catch (error) {
+        console.error('Error creating chart:', error);
+    }
 }
 
 // Update download button event listener
-document.getElementById('download-report-btn')?.addEventListener('click', showRoundSelectionModal);
-document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
+
 
 // Add this function call at the end of your initApp function
 
@@ -3780,71 +3850,69 @@ function findFolderInSubfolders(folder, targetId) {
 // Replace the renderMarksTable function with this:
 // ✅ Render marks into the table
 function renderMarksTable(selectedFolderId = "all") {
-  const tableBody = document.getElementById("marks-table-body");
-  const emptyState = document.getElementById("empty-marks");
-  tableBody.innerHTML = "";
-
-  let marksToShow = [];
-
-  if (selectedFolderId === "all") {
-    // Collect marks from all folders
-    marksToShow = collectAllMarks(folders);
-  } else {
-    // Find marks from a specific folder
-    const folder = findFolderById(selectedFolderId, folders);
-    if (folder) {
-      marksToShow = collectAllMarks([folder]);
+    const tableBody = document.getElementById("marks-table-body");
+    const emptyState = document.getElementById("empty-marks");
+    
+    if (!tableBody) {
+        console.error('Marks table body not found');
+        return;
     }
-  }
+    
+    tableBody.innerHTML = "";
 
-  // Show empty state if no marks
-  if (marksToShow.length === 0) {
-    emptyState.style.display = "block";
-    return;
-  } else {
-    emptyState.style.display = "none";
-  }
+    let marksToShow = [];
 
-  marksToShow.forEach(mark => {
-    // Get folder name - use the improved function
-    const folderName = getFolderName(mark.folderId);
-
-    // Calculate percentage
-    const percentage = mark.totalMarks > 0
-      ? ((mark.marksObtained / mark.totalMarks) * 100).toFixed(2)
-      : "0.00";
-
-    // Choose color class based on percentage
-    let percentageClass = "low";
-    if (percentage >= 75) {
-      percentageClass = "high";
-    } else if (percentage >= 40) {
-      percentageClass = "medium";
+    if (selectedFolderId === "all") {
+        // Show all marks from all folders
+        marksToShow = collectAllMarks(folders);
+    } else {
+        // Show marks only from the selected folder
+        const folder = findFolderById(selectedFolderId);
+        if (folder) {
+            marksToShow = collectAllMarks([folder]);
+        } else {
+            console.error('Folder not found:', selectedFolderId);
+        }
     }
 
-    // Format date if it exists
-    let formattedDate = "";
-    if (mark.date) {
-      const dateObj = new Date(mark.date);
-      formattedDate = !isNaN(dateObj) ? dateObj.toLocaleDateString() : mark.date;
+    // Show empty state if no marks
+    if (marksToShow.length === 0) {
+        if (emptyState) emptyState.style.display = "block";
+        return;
+    } else {
+        if (emptyState) emptyState.style.display = "none";
     }
 
-    // Build row
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${mark.subject || "Unnamed Subject"}</td>
-      <td>${mark.marksObtained || 0}</td>
-      <td>${mark.totalMarks || 0}</td>
-      <td><span class="percentage ${percentageClass}">${percentage}%</span></td>
-      <td>${formattedDate}</td>
-      <td>${folderName}</td>
-      <td>
-        <button class="action-btn edit" onclick="editMark('${mark.folderId}', '${mark.id}')">✏️</button>
-        <button class="action-btn delete" onclick="deleteMark('${mark.folderId}', '${mark.id}')">🗑️</button>
-      </td>
-    `;
-    tableBody.appendChild(tr);
-  });
+    marksToShow.forEach(mark => {
+        const folderName = getFolderName(mark.folderId);
+        const percentage = mark.totalMarks > 0 ? 
+            ((mark.marksObtained / mark.totalMarks) * 100).toFixed(2) : "0.00";
+        
+        let percentageClass = "low";
+        if (percentage >= 75) percentageClass = "high";
+        else if (percentage >= 40) percentageClass = "medium";
+
+        let formattedDate = "";
+        if (mark.date) {
+            const dateObj = new Date(mark.date);
+            formattedDate = !isNaN(dateObj) ? dateObj.toLocaleDateString() : mark.date;
+        }
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${mark.subject || "Unnamed Subject"}</td>
+            <td>${mark.marksObtained || 0}</td>
+            <td>${mark.totalMarks || 0}</td>
+            <td><span class="percentage ${percentageClass}">${percentage}%</span></td>
+            <td>${formattedDate}</td>
+            <td>${folderName}</td>
+            <td>
+                <button class="action-btn edit" onclick="editMark('${mark.folderId}', '${mark.id}')">✏️</button>
+                <button class="action-btn delete" onclick="deleteMark('${mark.folderId}', '${mark.id}')">🗑️</button>
+            </td>
+        `;
+        tableBody.appendChild(tr);
+    });
 }
 
 let customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
