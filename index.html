@@ -2277,10 +2277,10 @@ if (subjectSelect) {
   // ---------------- Folder actions ----------------
   document.getElementById('create-folder-btn')?.addEventListener('click', createFolder);
 
-  // ---------------- Marks actions ----------------
 document.getElementById('add-marks-btn')?.addEventListener('click', function(event) {
     event.preventDefault();
-    addMarks(event);
+    event.stopPropagation(); // Prevent any other handlers
+    addMarks(); // Don't pass the event
 });
   document.getElementById('folder-select')?.addEventListener('change', filterMarksByFolder);
 
@@ -3945,32 +3945,45 @@ function renderFolderRecursive(folder, container) {
 // Marks functions
 // ✅ Add marks to database
 // Add marks from form to database
-async function addMarks(event) {
-    if (event && event.preventDefault) {
-        event.preventDefault();
-    }
+async function addMarks() {
+    console.log('addMarks function called');
     
     const folderId = document.getElementById('marks-folder').value;
-    
-    // Get subject value
-    let subject = '';
     const subjectElement = document.getElementById('subject');
-    if (subjectElement) {
-        subject = subjectElement.value;
-    }
-    
+    let subject = subjectElement ? subjectElement.value : '';
     const marksObtained = Number(document.getElementById('marks-obtained').value);
     const totalMarks = Number(document.getElementById('total-marks').value);
-    const date = document.getElementById('marks-date').value || '';
+    const date = document.getElementById('marks-date').value || new Date().toISOString().split('T')[0];
 
-    if (!folderId || !subject || isNaN(marksObtained) || isNaN(totalMarks)) {
-        alert('Please fill all fields correctly.');
+    // Validation
+    if (!folderId) {
+        alert('Please select a folder.');
+        return;
+    }
+    
+    if (!subject || !subject.trim()) {
+        alert('Please select or enter a subject.');
+        return;
+    }
+    
+    if (isNaN(marksObtained) || marksObtained < 0) {
+        alert('Please enter valid marks obtained.');
+        return;
+    }
+    
+    if (isNaN(totalMarks) || totalMarks <= 0) {
+        alert('Please enter valid total marks (must be greater than 0).');
+        return;
+    }
+    
+    if (marksObtained > totalMarks) {
+        alert('Marks obtained cannot be greater than total marks.');
         return;
     }
 
-    let finalSubject = subject;
+    let finalSubject = subject.trim();
     
-    // If subject is "other", prompt for new subject and ADD IT TO DATABASE
+    // If subject is "other", prompt for new subject
     if (subject === 'other') {
         const newSubject = prompt('Enter new subject name:');
         if (!newSubject || !newSubject.trim()) {
@@ -3979,26 +3992,32 @@ async function addMarks(event) {
         }
         finalSubject = newSubject.trim();
         
-        // ✅ ADD THE SUBJECT TO DATABASE
+        // Add the new subject to database
         const subjectAdded = await addSubject(finalSubject);
         if (!subjectAdded) {
             alert('Failed to add subject. Please try again.');
             return;
         }
-        
-        // Update the dropdown to select the new subject
-        if (subjectElement) {
-            subjectElement.value = finalSubject;
-        }
     }
 
     try {
+        console.log('Saving marks to folder:', folderId);
+        
+        // Disable the button to prevent double clicks
+        const addButton = document.getElementById('add-marks-btn');
+        const originalText = addButton.textContent;
+        addButton.textContent = 'Saving...';
+        addButton.disabled = true;
+
+        // Save marks to database
         await dataAPI.addMarks(folderId, { 
             subject: finalSubject, 
             marksObtained, 
             totalMarks, 
             date 
         });
+        
+        console.log('Marks saved successfully');
         
         // Clear form
         if (subjectElement) subjectElement.value = '';
@@ -4008,10 +4027,19 @@ async function addMarks(event) {
         // Refresh data
         await loadUserData();
         
+        // Show success message
         alert('Marks added successfully!');
+        
     } catch (err) {
         console.error('Error adding marks:', err);
         alert('Failed to add marks: ' + (err.message || err));
+    } finally {
+        // Re-enable the button
+        const addButton = document.getElementById('add-marks-btn');
+        if (addButton) {
+            addButton.textContent = 'Add Marks';
+            addButton.disabled = false;
+        }
     }
 }
 
