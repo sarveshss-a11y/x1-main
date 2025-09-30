@@ -1224,29 +1224,31 @@ async function apiRequest(endpoint, options = {}) {
     try {
         const response = await fetch(url, config);
         
-        // Check if response is unauthorized
+        // Handle unauthorized responses globally
         if (response.status === 401) {
-            localStorage.removeItem('authToken');
-            showPage('login-page');
+            handleTokenExpiration();
             throw new Error('Session expired. Please login again.');
         }
         
-        // Handle non-JSON responses
-        const contentType = response.headers.get('content-type');
-        let data;
-        
-        if (contentType && contentType.includes('application/json')) {
-            data = await response.json();
-        } else {
-            data = await response.text();
-            console.warn('Non-JSON response received:', data);
-        }
-
+        // Handle other error responses
         if (!response.ok) {
-            throw new Error(data.message || data.error || `Server error: ${response.status}`);
+            const errorText = await response.text();
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch {
+                errorData = { message: errorText || `Server error: ${response.status}` };
+            }
+            throw new Error(errorData.message || `Server error: ${response.status}`);
         }
 
-        return data;
+        // Handle successful JSON responses
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return await response.json();
+        } else {
+            return await response.text();
+        }
     } catch (error) {
         console.error('API request failed:', error);
         throw error;
@@ -1287,10 +1289,13 @@ const authAPI = {
 };
 async function refreshToken() {
     try {
+        const token = localStorage.getItem('authToken');
+        if (!token) return false;
+
         const response = await fetch(`${API_BASE_URL}/api/refresh-token`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                'Authorization': `Bearer ${token}`
             }
         });
         
@@ -1304,6 +1309,8 @@ async function refreshToken() {
     }
     return false;
 }
+
+
 // Data API functions
 const dataAPI = {
     getUserData: async () => await apiRequest('/api/user'),
@@ -1515,7 +1522,12 @@ saveUserData: async (folders, subjects) =>
                 <p style="margin-top: 20px;">
                     Don't have an account? <a href="#" class="link"
                         id="signup-link">Sign Up</a>
+                        
                 </p>
+                <div id="token-expired-message" style="display: none;" class="alert alert-error">
+    Your session has expired. Please login again.
+    <button onclick="clearExpiredToken()" class="btn btn-warning" style="margin-left: 10px;">Clear Expired Session</button>
+</div>
             </div>
             <!-- Add Marks Modal -->
 
@@ -1946,29 +1958,7 @@ async function checkApiConnection() {
 }
 }
 
-const authenticateToken = async (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (!token) {
-        return res.status(401).send({ message: 'Access token required' });
-    }
 
-    try {
-        req.user = verifyToken(token);
-        
-        // Verify user still exists in database
-        const user = await User.findById(req.user.userId);
-        if (!user) {
-            return res.status(401).send({ message: 'User no longer exists' });
-        }
-        
-        next();
-    } catch (err) {
-        console.error('Authentication error:', err.message);
-        return res.status(403).send({ message: 'Invalid or expired token' });
-    }
-};
 
 // Initialize the app
 // Initialize the app when the DOM is loaded
@@ -1998,21 +1988,18 @@ async function initApp() {
     const token = localStorage.getItem("authToken");
     if (token) {
         try {
-            // Verify token is valid before attempting to load data
+            // Verify token by making a simple API request
             await validateToken(token);
             await loadUserData();
             showPage("app-page");
         } catch (err) {
             console.error("Auto-login failed:", err.message);
-            // Clear invalid token
-            localStorage.removeItem("authToken");
-            localStorage.removeItem('localBackupData');
-            showPage("login-page");
+            // Clear invalid token and redirect to login
+            handleTokenExpiration();
         }
     } else {
         showPage("login-page");
     }
-        await syncSubjects();
 
     // Check API connection
     await checkApiConnection();
@@ -2023,6 +2010,21 @@ async function initApp() {
     }, 0);
 }
 
+function handleTokenExpiration() {
+    console.log('Token expired or invalid, redirecting to login');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('localBackupData');
+    showPage('login-page');
+    
+    // Show message to user
+    const loginError = document.getElementById('login-error');
+    if (loginError) {
+        loginError.textContent = 'Your session has expired. Please login again.';
+        loginError.style.display = 'block';
+    }
+}
+
+
 // Add token validation function
 async function validateToken(token) {
     try {
@@ -2031,6 +2033,10 @@ async function validateToken(token) {
                 'Authorization': `Bearer ${token}`
             }
         });
+        
+        if (response.status === 401) {
+            throw new Error('Token expired');
+        }
         
         if (!response.ok) {
             throw new Error('Token validation failed');
@@ -2339,8 +2345,16 @@ async function handleLogin(event) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Login failed");
 
-        // 🔹 Save real token from backend
+        // Verify token structure before saving
+        if (!data.token) {
+            throw new Error('No token received from server');
+        }
+
+        // Save token and verify it works
         localStorage.setItem("authToken", data.token);
+        
+        // Test the token immediately
+        await validateToken(data.token);
 
         currentUser = data.user;
         showPage("app-page");
@@ -2348,10 +2362,11 @@ async function handleLogin(event) {
 
     } catch (error) {
         console.error("Login error:", error);
+        // Clear invalid token
+        localStorage.removeItem('authToken');
         showError("login-error", error.message || "Login failed. Please try again.");
     }
 }
-
 
 
 
@@ -4119,6 +4134,14 @@ function generateMultiRoundChart() {
     hideModal('round-selection-modal');
 }
 
+
+function clearExpiredToken() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('localBackupData');
+    location.reload();
+}
+
+
 function renderMultiRoundChart(roundIds) {
     const ctx = document.getElementById('progress-chart');
     if (!ctx) {
@@ -4946,6 +4969,8 @@ async function syncSubjects() {
         }
     } catch (error) {
         console.error('Sync failed:', error);
+        // Don't throw error here, just log it
+        // This allows the app to continue functioning even if sync fails
     }
 }
 
