@@ -2074,8 +2074,15 @@ document.getElementById('add-marks-btn')?.addEventListener('click', function(eve
   document.getElementById('theme-switch')?.addEventListener('change', toggleTheme);
 
   // ---------------- Report download ----------------
-  document.getElementById('download-report-btn')?.addEventListener('click', downloadReport);
-
+document.getElementById('download-report-btn')?.addEventListener('click', function() {
+    // Direct download without pop-up
+    html2canvas(document.querySelector('.progress-report')).then(canvas => {
+        const link = document.createElement('a');
+        link.download = 'progress-report.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+});
   // ---------------- Import / Export ----------------
   document.getElementById('export-data-btn')?.addEventListener('click', exportData);
   document.getElementById('import-data-btn')?.addEventListener('click', () => {
@@ -3334,7 +3341,8 @@ async function deleteAccount() {
         `;
 
         // Click to select folder
-      folderItem.addEventListener('click', (e) => {
+     // In your renderFolders function, update the click event:
+folderItem.addEventListener('click', (e) => {
     if (!e.target.closest('.folder-actions')) {
         selectedFolderId = folder.id;
         renderFolders();
@@ -3475,14 +3483,13 @@ function renderFolderRecursive(folder, container) {
 // ✅ Add marks to database
 // Add marks from form to database
 async function addMarks(event) {
-    // Prevent default form submission if it's an event
     if (event && event.preventDefault) {
         event.preventDefault();
     }
     
     const folderId = document.getElementById('marks-folder').value;
     
-    // Get subject value properly
+    // FIX: Get subject value properly
     let subject = '';
     const subjectElement = document.getElementById('subject');
     if (subjectElement) {
@@ -3535,14 +3542,6 @@ async function addMarks(event) {
         console.error('Error adding marks:', err);
         alert('Failed to add marks: ' + (err.message || err));
     }
-    // Add this to your addMarks function for debugging
-console.log('Sending marks data:', {
-    folderId,
-    subject: finalSubject,
-    marksObtained,
-    totalMarks,
-    date
-});
 }
 
 
@@ -3550,7 +3549,6 @@ console.log('Sending marks data:', {
 
 
 // Add this event listener to your setupEventListeners function
-document.getElementById('add-marks-btn').addEventListener('click', addMarks);
 
 
 
@@ -3840,9 +3838,6 @@ function renderMultiRoundChart(roundIds) {
 function renderChart() {
     const ctx = document.getElementById('progress-chart').getContext('2d');
     if (chart) chart.destroy();
-
-    // Use the global marks array which should contain all marks
-
 
     // Only show marks from selected folder
     let marksToShow = [];
