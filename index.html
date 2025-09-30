@@ -2209,66 +2209,8 @@ function backupDataLocally() {
 // Call backupDataLocally() after any data modification
 // Event Listeners
 function setupEventListeners() {
-    // Add this to your setupEventListeners function temporarily:
-    document.getElementById('download-report-btn')?.addEventListener('click', showRoundSelectionModal);
-document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
-    document.getElementById('retry-api-btn')?.addEventListener('click', checkApiConnection);
-    // Chart download buttons
-document.getElementById('download-chart-btn')?.addEventListener('click', downloadCurrentChart);
-document.getElementById('download-all-charts-btn')?.addEventListener('click', downloadAllChartsAsZip);
-document.getElementById('download-round-selection-btn')?.addEventListener('click', showRoundSelectionModal);
-
-
-  // ---------------- Auth navigation ----------------
-  document.getElementById('login-link')?.addEventListener('click', () => showPage('login-page'));
-  document.getElementById('signup-link')?.addEventListener('click', () => showPage('signup-page'));
-
-  // ---------------- Auth actions ----------------
-  document.getElementById('signup-btn')?.addEventListener('click', handleSignup);
-  document.getElementById('login-btn')?.addEventListener('click', handleLogin);
-  document.getElementById('logout-btn')?.addEventListener('click', handleLogout);
-// Remove the old event listener and replace with this:
-const subjectSelect = document.getElementById('subject');
-if (subjectSelect) {
-    subjectSelect.addEventListener('change', function() {
-        if (this.value === 'other') {
-            const newSubject = prompt('Enter new subject name:');
-            if (newSubject && newSubject.trim()) {
-                // This will now be handled in addMarks function
-                // Just set the value to "other" and let addMarks handle it
-                this.value = 'other'; // Keep it as "other" so addMarks knows to process it
-            } else {
-                this.value = '';
-            }
-        }
-    });
-}
-
     console.log('Setting up event listeners...');
     
-    // Add debug button temporarily
-   
-
-    // ---------------- Settings navigation ----------------
-    const settingsBtn = document.getElementById('settings-btn');
-    if (settingsBtn) {
-        console.log('Settings button found, adding click listener');
-        settingsBtn.addEventListener('click', () => {
-            console.log('Settings button clicked');
-            showPage('settings-page');
-        });
-    } else {
-        console.error('Settings button not found!');
-    }
-
-    const backBtn = document.getElementById('back-btn');
-    if (backBtn) {
-        backBtn.addEventListener('click', () => {
-            console.log('Back button clicked');
-            showPage('app-page');
-        });
-    }
-
     // ---------------- Auth navigation ----------------
     document.getElementById('login-link')?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -2280,75 +2222,81 @@ if (subjectSelect) {
         showPage('signup-page');
     });
 
-  // ---------------- Folder actions ----------------
-  document.getElementById('create-folder-btn')?.addEventListener('click', createFolder);
+    // ---------------- Auth actions ----------------
+    document.getElementById('signup-btn')?.addEventListener('click', handleSignup);
+    document.getElementById('login-btn')?.addEventListener('click', handleLogin);
+    document.getElementById('logout-btn')?.addEventListener('click', handleLogout);
 
-document.getElementById('add-marks-btn')?.addEventListener('click', function(event) {
-    event.preventDefault();
-    event.stopPropagation(); // Prevent any other handlers
-    addMarks(); // Don't pass the event
-});
-  document.getElementById('folder-select')?.addEventListener('change', filterMarksByFolder);
+    // ---------------- Folder actions ----------------
+    document.getElementById('create-folder-btn')?.addEventListener('click', createFolder);
 
-  // ---------------- Settings actions ----------------
-  document.getElementById('settings-btn')?.addEventListener('click', () => showPage('settings-page'));
-  document.getElementById('back-btn')?.addEventListener('click', () => showPage('app-page'));
-  document.getElementById('change-username-btn')?.addEventListener('click', () => showModal('username-modal'));
-  document.getElementById('change-password-btn')?.addEventListener('click', () => showModal('password-modal'));
-  document.getElementById('save-username-btn')?.addEventListener('click', changeUsername);
-  document.getElementById('save-password-btn')?.addEventListener('click', changePassword);
-  document.getElementById('clear-data-btn')?.addEventListener('click', clearAllData);
-  document.getElementById('delete-account-btn')?.addEventListener('click', deleteAccount);
-
-  // ---------------- Theme toggle ----------------
-  document.getElementById('theme-switch')?.addEventListener('change', toggleTheme);
-
-  // ---------------- Report download ----------------
-document.getElementById('download-report-btn')?.addEventListener('click', function() {
-    // Direct download without pop-up
-    html2canvas(document.querySelector('.progress-report')).then(canvas => {
-        const link = document.createElement('a');
-        link.download = 'progress-report.png';
-        link.href = canvas.toDataURL('image/png');
-        link.click();
+    // SINGLE event listener for add marks button
+    document.getElementById('add-marks-btn')?.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Add marks button clicked');
+        addMarks();
     });
-});
-  // ---------------- Import / Export ----------------
-  document.getElementById('export-data-btn')?.addEventListener('click', exportData);
-  document.getElementById('import-data-btn')?.addEventListener('click', () => {
-    document.getElementById('import-file').click();
-  });
-  document.getElementById('import-file')?.addEventListener('change', handleImportData);
 
-  // ---------------- Modal close buttons ----------------
-  document.querySelectorAll('.modal-close').forEach(button => {
-    button.addEventListener('click', () => {
-      const modalId = button.getAttribute('data-modal');
-      hideModal(modalId);
+    document.getElementById('folder-select')?.addEventListener('change', filterMarksByFolder);
+
+    // ---------------- Settings navigation ----------------
+    document.getElementById('settings-btn')?.addEventListener('click', () => {
+        showPage('settings-page');
     });
-  });
 
-  
-  // ---------------- Chart type selection ----------------
-  document.getElementById('chart-type-select')?.addEventListener('change', (e) => {
-    chartType = e.target.value;
-    localStorage.setItem('chartType', chartType);
-    renderChart();
-  });
+    document.getElementById('back-btn')?.addEventListener('click', () => {
+        showPage('app-page');
+    });
 
-  // ---------------- Setup password toggles ----------------
-  setupPasswordToggles();
+    // ---------------- Settings actions ----------------
+    document.getElementById('change-username-btn')?.addEventListener('click', () => showModal('username-modal'));
+    document.getElementById('change-password-btn')?.addEventListener('click', () => showModal('password-modal'));
+    document.getElementById('save-username-btn')?.addEventListener('click', changeUsername);
+    document.getElementById('save-password-btn')?.addEventListener('click', changePassword);
+    document.getElementById('clear-data-btn')?.addEventListener('click', clearAllData);
+    document.getElementById('delete-account-btn')?.addEventListener('click', deleteAccount);
+
+    // ---------------- Theme toggle ----------------
+    document.getElementById('theme-switch')?.addEventListener('change', toggleTheme);
+
+    // ---------------- Chart download buttons ----------------
+    document.getElementById('download-chart-btn')?.addEventListener('click', downloadCurrentChart);
+    document.getElementById('download-all-charts-btn')?.addEventListener('click', downloadAllChartsAsZip);
+    document.getElementById('download-round-selection-btn')?.addEventListener('click', showRoundSelectionModal);
+    document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
+
+    // ---------------- Import / Export ----------------
+    document.getElementById('export-data-btn')?.addEventListener('click', exportData);
+    document.getElementById('import-data-btn')?.addEventListener('click', () => {
+        document.getElementById('import-file').click();
+    });
+    document.getElementById('import-file')?.addEventListener('change', handleImportData);
+
+    // ---------------- Modal close buttons ----------------
+    document.querySelectorAll('.modal-close').forEach(button => {
+        button.addEventListener('click', () => {
+            const modalId = button.getAttribute('data-modal');
+            hideModal(modalId);
+        });
+    });
+
+    // ---------------- Chart type selection ----------------
+    document.getElementById('chart-type-select')?.addEventListener('change', (e) => {
+        chartType = e.target.value;
+        localStorage.setItem('chartType', chartType);
+        renderChart();
+    });
+
+    // ---------------- API retry button ----------------
+    document.getElementById('retry-api-btn')?.addEventListener('click', checkApiConnection);
+
+    // ---------------- Setup password toggles ----------------
+    setupPasswordToggles();
 }
 
 
 
-document.addEventListener("DOMContentLoaded", setupEventListeners);
-
-
-// Run after DOM is fully loaded
-document.addEventListener("DOMContentLoaded", () => {
-    setupEventListeners();
-});
 
 
 
@@ -3966,67 +3914,74 @@ function renderFolderRecursive(folder, container) {
 async function addMarks() {
     console.log('addMarks function called');
     
-    const folderId = document.getElementById('marks-folder').value;
-    const subjectElement = document.getElementById('subject');
-    let subject = subjectElement ? subjectElement.value : '';
-    const marksObtained = Number(document.getElementById('marks-obtained').value);
-    const totalMarks = Number(document.getElementById('total-marks').value);
-    const date = document.getElementById('marks-date').value || new Date().toISOString().split('T')[0];
-
-    // Validation
-    if (!folderId) {
-        alert('Please select a folder.');
+    const addButton = document.getElementById('add-marks-btn');
+    
+    // Prevent multiple simultaneous submissions
+    if (addButton.disabled) {
+        console.log('Add marks already in progress, ignoring duplicate click');
         return;
     }
     
-    if (!subject || !subject.trim()) {
-        alert('Please select or enter a subject.');
-        return;
-    }
-    
-    if (isNaN(marksObtained) || marksObtained < 0) {
-        alert('Please enter valid marks obtained.');
-        return;
-    }
-    
-    if (isNaN(totalMarks) || totalMarks <= 0) {
-        alert('Please enter valid total marks (must be greater than 0).');
-        return;
-    }
-    
-    if (marksObtained > totalMarks) {
-        alert('Marks obtained cannot be greater than total marks.');
-        return;
-    }
-
-    let finalSubject = subject.trim();
-    
-    // If subject is "other", prompt for new subject
-    if (subject === 'other') {
-        const newSubject = prompt('Enter new subject name:');
-        if (!newSubject || !newSubject.trim()) {
-            alert('Subject name is required.');
-            return;
-        }
-        finalSubject = newSubject.trim();
-        
-        // Add the new subject to database
-        const subjectAdded = await addSubject(finalSubject);
-        if (!subjectAdded) {
-            alert('Failed to add subject. Please try again.');
-            return;
-        }
-    }
+    // Disable the button immediately to prevent double clicks
+    const originalText = addButton.textContent;
+    addButton.textContent = 'Saving...';
+    addButton.disabled = true;
 
     try {
+        const folderId = document.getElementById('marks-folder').value;
+        const subjectElement = document.getElementById('subject');
+        let subject = subjectElement ? subjectElement.value : '';
+        const marksObtained = Number(document.getElementById('marks-obtained').value);
+        const totalMarks = Number(document.getElementById('total-marks').value);
+        const date = document.getElementById('marks-date').value || new Date().toISOString().split('T')[0];
+
+        // Validation
+        if (!folderId) {
+            alert('Please select a folder.');
+            return;
+        }
+        
+        if (!subject || !subject.trim()) {
+            alert('Please select or enter a subject.');
+            return;
+        }
+        
+        if (isNaN(marksObtained) || marksObtained < 0) {
+            alert('Please enter valid marks obtained.');
+            return;
+        }
+        
+        if (isNaN(totalMarks) || totalMarks <= 0) {
+            alert('Please enter valid total marks (must be greater than 0).');
+            return;
+        }
+        
+        if (marksObtained > totalMarks) {
+            alert('Marks obtained cannot be greater than total marks.');
+            return;
+        }
+
+        let finalSubject = subject.trim();
+        
+        // If subject is "other", prompt for new subject
+        if (subject === 'other') {
+            const newSubject = prompt('Enter new subject name:');
+            if (!newSubject || !newSubject.trim()) {
+                alert('Subject name is required.');
+                return;
+            }
+            finalSubject = newSubject.trim();
+            
+            // Add the new subject to database
+            const subjectAdded = await addSubject(finalSubject);
+            if (!subjectAdded) {
+                alert('Failed to add subject. Please try again.');
+                return;
+            }
+        }
+
         console.log('Saving marks to folder:', folderId);
         
-        // Disable the button to prevent double clicks
-        const addButton = document.getElementById('add-marks-btn');
-        const originalText = addButton.textContent;
-        addButton.textContent = 'Saving...';
-        addButton.disabled = true;
-
         // Save marks to database
         await dataAPI.addMarks(folderId, { 
             subject: finalSubject, 
@@ -4037,7 +3992,7 @@ async function addMarks() {
         
         console.log('Marks saved successfully');
         
-        // CRITICAL: Refresh ALL data from server to ensure UI is in sync
+        // Refresh ALL data from server to ensure UI is in sync
         await loadUserData();
         
         // Clear form
