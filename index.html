@@ -1219,6 +1219,7 @@ const API_BASE_URL = window.location.hostname === 'localhost' || window.location
 
 // API Request Function
 // Modify your apiRequest function to handle errors better
+// In index.html - Update apiRequest function
 async function apiRequest(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     const token = localStorage.getItem('authToken');
@@ -1231,7 +1232,6 @@ async function apiRequest(endpoint, options = {}) {
         ...options,
     };
 
-    // Add authorization header if token exists
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -1241,17 +1241,22 @@ async function apiRequest(endpoint, options = {}) {
     }
 
     try {
+        console.log('Making API request to:', url, config); // Add logging
+        
         const response = await fetch(url, config);
         
-        // Handle unauthorized responses globally
+        // Log response details
+        console.log('Response status:', response.status, response.statusText);
+        
         if (response.status === 401) {
             handleTokenExpiration();
             throw new Error('Session expired. Please login again.');
         }
         
-        // Handle other error responses
         if (!response.ok) {
             const errorText = await response.text();
+            console.error('Server error response:', errorText); // Log error response
+            
             let errorData;
             try {
                 errorData = JSON.parse(errorText);
@@ -1261,7 +1266,6 @@ async function apiRequest(endpoint, options = {}) {
             throw new Error(errorData.message || `Server error: ${response.status}`);
         }
 
-        // Handle successful JSON responses
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
             return await response.json();
@@ -1270,6 +1274,8 @@ async function apiRequest(endpoint, options = {}) {
         }
     } catch (error) {
         console.error('API request failed:', error);
+        console.error('Endpoint:', endpoint);
+        console.error('Options:', options);
         throw error;
     }
 }
@@ -1361,11 +1367,11 @@ const dataAPI = {
         body: updates,
     }),
 
-    addMarks: async (folderId, marksData) => 
-        await apiRequest(`/api/folders/${folderId}/marks`, {
-            method: 'POST',
-            body: marksData,
-        }),
+    addMarks: async (folderId, markData) => 
+    await apiRequest(`/api/folders/${folderId}/marks`, {
+        method: 'POST',
+        body: markData,
+    }),
     
     updateMarks: async (folderId, markId, marksData) => 
         await apiRequest(`/api/folders/${folderId}/marks/${markId}`, {
@@ -3978,6 +3984,12 @@ async function addMarks() {
     
     if (marksObtained > totalMarks) {
         alert('Marks obtained cannot be greater than total marks.');
+        return;
+    }
+
+        const folderExists = folders.some(folder => folder.id === folderId);
+    if (!folderExists) {
+        alert('Selected folder does not exist. Please refresh and try again.');
         return;
     }
 
