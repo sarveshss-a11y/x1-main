@@ -4,13 +4,17 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Marks Explorer with Data Persistence</title>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script
             src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
         <style>
         .toggle-arrow {
     margin-right: 8px;
@@ -1390,9 +1394,9 @@ saveUserData: async (folders, subjects) =>
     </head>
     <body>
         <div class="api-status" id="api-status">Checking API connection...
-            <button id="retry-api-btn" style="display: none; margin-left: 10px;">Retry</button>
+            <button id="retry-api-btn"
+                style="display: none; margin-left: 10px;">Retry</button>
         </div>
-        
 
         <!-- Modals -->
         <div class="modal" id="username-modal">
@@ -1537,12 +1541,15 @@ saveUserData: async (folders, subjects) =>
                 <p style="margin-top: 20px;">
                     Don't have an account? <a href="#" class="link"
                         id="signup-link">Sign Up</a>
-                        
+
                 </p>
-                <div id="token-expired-message" style="display: none;" class="alert alert-error">
-    Your session has expired. Please login again.
-    <button onclick="clearExpiredToken()" class="btn btn-warning" style="margin-left: 10px;">Clear Expired Session</button>
-</div>
+                <div id="token-expired-message" style="display: none;"
+                    class="alert alert-error">
+                    Your session has expired. Please login again.
+                    <button onclick="clearExpiredToken()"
+                        class="btn btn-warning" style="margin-left: 10px;">Clear
+                        Expired Session</button>
+                </div>
             </div>
             <!-- Add Marks Modal -->
 
@@ -1559,8 +1566,6 @@ saveUserData: async (folders, subjects) =>
                             </div>
                         </div>
 
-
-
                         <div class="nav-section">
                             <div class="nav-title">Folders</div>
                             <div class="folder-input-container">
@@ -1570,7 +1575,8 @@ saveUserData: async (folders, subjects) =>
                                 <button class="btn btn-success"
                                     id="create-folder-btn">Add</button>
                             </div>
-                            <div id="folders-list" class="folders-container"></div>
+                            <div id="folders-list"
+                                class="folders-container"></div>
 
                             <div class="folder-structure" id="folder-list">
                                 <!-- Folders will be dynamically added here -->
@@ -1615,24 +1621,26 @@ saveUserData: async (folders, subjects) =>
                                     id="lowest-percentage">0%</div>
                             </div>
                         </div>
-<div class="stat-card">
-    <div class="stat-label">Total Marks</div>
-    <div class="stat-value" id="total-marks-card">0</div>
-</div>
-<div class="stat-card">
-    <div class="stat-label">Obtained Marks</div>
-    <div class="stat-value" id="obtained-marks-card">0</div>
-</div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Marks</div>
+                            <div class="stat-value"
+                                id="total-marks-card">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Obtained Marks</div>
+                            <div class="stat-value"
+                                id="obtained-marks-card">0</div>
+                        </div>
 
                         <div class="marks-form">
                             <h3 class="form-title">Add New Marks</h3>
                             <div class="form-group">
-        <label>Manage Subjects</label>
-        
-        <div class="subjects-list" id="subjects-list">
-            <!-- Subjects will appear here as tags -->
-        </div>
-    </div>
+                                <label>Manage Subjects</label>
+
+                                <div class="subjects-list" id="subjects-list">
+                                    <!-- Subjects will appear here as tags -->
+                                </div>
+                            </div>
                             <div class="form-group">
                                 <label for="current-folder">Current
                                     Folder</label>
@@ -1711,17 +1719,22 @@ saveUserData: async (folders, subjects) =>
                             <div class="chart-container">
                                 <canvas id="progress-chart"></canvas>
                             </div>
-                            <div style="display: flex; gap: 10px; margin-top: 15px;">
-        <button class="btn btn-info download-btn" id="download-chart-btn">
-            Download Current Chart
-        </button>
-        <button class="btn btn-success download-btn" id="download-all-charts-btn">
-            Download All Charts as ZIP
-        </button>
-        <button class="btn btn-warning download-btn" id="download-round-selection-btn">
-            Multi-Round Charts
-        </button>
-    </div>
+                            <div
+                                style="display: flex; gap: 10px; margin-top: 15px;">
+                                <button class="btn btn-info download-btn"
+                                    id="download-chart-btn">
+                                    Download Current Chart
+                                </button>
+                                <button class="btn btn-success download-btn"
+                                    id="download-all-charts-btn">
+                                    Download All Charts as ZIP
+                                </button>
+                                <button class="btn btn-warning download-btn"
+                                    id="download-round-selection-btn">
+                                    Multi-Round Charts
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1771,17 +1784,20 @@ saveUserData: async (folders, subjects) =>
                         <div class="settings-option">
                             <div class="option-label">
                                 <h4>Dark Mode</h4>
-                                <p>Toggle dark mode for better night viewing</p>
+                                <p>Toggle dark mode for better night
+                                    viewing</p>
                             </div>
                             <div class="option-control">
                                 <label class="theme-switch">
-                                    <span class="theme-switch-text">Light</span>
+                                    <span
+                                        class="theme-switch-text">Light</span>
                                     <div class="switch">
                                         <input type="checkbox"
                                             id="theme-switch">
                                         <span class="slider"></span>
                                     </div>
-                                    <span class="theme-switch-text">Dark</span>
+                                    <span
+                                        class="theme-switch-text">Dark</span>
                                 </label>
                             </div>
                         </div>
@@ -1794,7 +1810,8 @@ saveUserData: async (folders, subjects) =>
                             <p>Select how you want to view your progress</p>
                         </div>
                         <div class="option-control">
-                            <select id="chart-type-select" class="form-control">
+                            <select id="chart-type-select"
+                                class="form-control">
                                 <option value="bar">Bar</option>
                                 <option value="line">Line</option>
                                 <option value="pie">Pie</option>
@@ -1814,7 +1831,8 @@ saveUserData: async (folders, subjects) =>
                             </div>
                             <div class="option-control">
                                 <button class="btn btn-info"
-                                    id="export-data-btn">Export Data</button>
+                                    id="export-data-btn">Export
+                                    Data</button>
                             </div>
                         </div>
 
@@ -1827,12 +1845,14 @@ saveUserData: async (folders, subjects) =>
                                 <input type="file" id="import-file"
                                     accept=".json" style="display: none;">
                                 <button class="btn btn-info"
-                                    id="import-data-btn">Import Data</button>
+                                    id="import-data-btn">Import
+                                    Data</button>
                             </div>
                         </div>
                     </div>
                     <div class="danger-zone">
-                        <h3 class="settings-title"><i>⚠️</i> Danger Zone</h3>
+                        <h3 class="settings-title"><i>⚠️</i> Danger
+                            Zone</h3>
 
                         <div class="settings-option">
                             <div class="option-label">
@@ -1863,24 +1883,26 @@ saveUserData: async (folders, subjects) =>
             </div>
         </div>
         <!-- Add this modal before closing body tag -->
-<div class="modal" id="round-selection-modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3 class="modal-title">Select Rounds for Chart</h3>
-            <button class="modal-close" data-modal="round-selection-modal">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div id="round-selection-list">
-                <!-- Rounds will be added here dynamically -->
+        <div class="modal" id="round-selection-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">Select Rounds for Chart</h3>
+                    <button class="modal-close"
+                        data-modal="round-selection-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="round-selection-list">
+                        <!-- Rounds will be added here dynamically -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-warning"
+                        data-modal="round-selection-modal">Cancel</button>
+                    <button class="btn btn-success"
+                        id="generate-chart-btn">Generate Chart</button>
+                </div>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="btn btn-warning" data-modal="round-selection-modal">Cancel</button>
-            <button class="btn btn-success" id="generate-chart-btn">Generate Chart</button>
-        </div>
-    </div>
-</div>
-
 
         <script>
     let chartType = localStorage.getItem('chartType') || 'bar';
