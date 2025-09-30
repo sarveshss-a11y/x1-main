@@ -4571,7 +4571,7 @@ async function loadUserData() {
         currentUser = data.user || { username: data.username || data.user?.username || 'User' };
         folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
         
-        // ✅ FIX: Always use backend subjects as the source of truth
+        // Always use backend subjects as source of truth
         if (Array.isArray(data.subjects)) {
             customSubjects = data.subjects;
             console.log('Loaded subjects from backend:', customSubjects);
@@ -4581,7 +4581,7 @@ async function loadUserData() {
             console.log('No subjects found in backend, initializing empty');
         }
         
-        // ✅ Always update localStorage to match backend
+        // Update localStorage to match backend
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
 
         // Update UI
@@ -4847,24 +4847,26 @@ async function addSubject(subjectName) {
     
     if (!subjectExists) {
         // Add to local array
-        customSubjects.push(subject);
+        const updatedSubjects = [...customSubjects, subject];
         
-        // ✅ CRITICAL: Save to database and update all browsers
         try {
-            console.log('Saving subjects to database:', customSubjects);
-            await dataAPI.saveUserData(folders, customSubjects);
+            console.log('Saving subjects to database:', updatedSubjects);
             
-            // ✅ Update localStorage to match
+            // Save to database
+            const result = await dataAPI.saveUserData(folders, updatedSubjects);
+            console.log('Save result:', result);
+            
+            // Update local state only after successful save
+            customSubjects = updatedSubjects;
             localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
-            console.log('Subject saved to database and localStorage:', subject);
             
             // Update UI
             renderSubjects();
+            
+            console.log('Subject saved successfully:', subject);
             return true;
         } catch (error) {
             console.error('Failed to save subjects to database:', error);
-            // Revert the change if save fails
-            customSubjects = customSubjects.filter(s => s !== subject);
             alert('Failed to save subject. Please try again.');
             return false;
         }
@@ -4873,6 +4875,30 @@ async function addSubject(subjectName) {
         return true;
     }
 }
+async function debugSubjectSync() {
+    console.log('=== SUBJECT SYNC DEBUG ===');
+    console.log('Local customSubjects:', customSubjects);
+    
+    try {
+        const userData = await dataAPI.getUserData();
+        console.log('Backend user data:', {
+            subjects: userData.subjects,
+            foldersCount: userData.folders?.length
+        });
+        
+        // Check if they match
+        const subjectsMatch = JSON.stringify(customSubjects) === JSON.stringify(userData.subjects);
+        console.log('Subjects in sync:', subjectsMatch);
+        
+        if (!subjectsMatch) {
+            console.log('Out of sync! Local has', customSubjects.length, 'backend has', userData.subjects?.length);
+        }
+    } catch (error) {
+        console.error('Error debugging:', error);
+    }
+}
+
+// Call this from browser console: debugSubjectSync()
 
 
 async function removeSubject(subjectToRemove) {
