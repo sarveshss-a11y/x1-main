@@ -2012,7 +2012,8 @@ async function initApp() {
     } else {
         showPage("login-page");
     }
-    
+        await syncSubjects();
+
     // Check API connection
     await checkApiConnection();
     
@@ -2068,6 +2069,24 @@ if (document.readyState === 'loading') {
 } else {
     initApp();
 }
+
+
+// Run this in browser console to force sync
+async function forceSubjectSync() {
+    const data = await dataAPI.getUserData();
+    console.log('Backend subjects:', data.subjects);
+    console.log('Local subjects:', JSON.parse(localStorage.getItem('customSubjects') || '[]'));
+    
+    // Use backend subjects
+    if (Array.isArray(data.subjects)) {
+        customSubjects = data.subjects;
+        localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+        renderSubjects();
+        console.log('Forced sync complete!');
+    }
+}
+
+// Call from browser console: forceSubjectSync()
 
 function exportData() {
   const data = { folders, marks, currentUser };
@@ -3849,11 +3868,7 @@ async function addMarks(event) {
     let subject = '';
     const subjectElement = document.getElementById('subject');
     if (subjectElement) {
-        if (subjectElement.tagName === 'SELECT') {
-            subject = subjectElement.value;
-        } else {
-            subject = subjectElement.value.trim();
-        }
+        subject = subjectElement.value;
     }
     
     const marksObtained = Number(document.getElementById('marks-obtained').value);
@@ -3865,8 +3880,9 @@ async function addMarks(event) {
         return;
     }
 
-    // If subject is "other", prompt for new subject
     let finalSubject = subject;
+    
+    // If subject is "other", prompt for new subject and ADD IT TO DATABASE
     if (subject === 'other') {
         const newSubject = prompt('Enter new subject name:');
         if (!newSubject || !newSubject.trim()) {
@@ -3875,8 +3891,17 @@ async function addMarks(event) {
         }
         finalSubject = newSubject.trim();
         
-        // ✅ ADD THE SUBJECT TO DATABASE BEFORE ADDING MARKS
-        await addSubject(finalSubject);
+        // ✅ ADD THE SUBJECT TO DATABASE
+        const subjectAdded = await addSubject(finalSubject);
+        if (!subjectAdded) {
+            alert('Failed to add subject. Please try again.');
+            return;
+        }
+        
+        // Update the dropdown to select the new subject
+        if (subjectElement) {
+            subjectElement.value = finalSubject;
+        }
     }
 
     try {
@@ -4546,22 +4571,17 @@ async function loadUserData() {
         currentUser = data.user || { username: data.username || data.user?.username || 'User' };
         folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
         
-        // ✅ PRIORITIZE BACKEND SUBJECTS OVER LOCALSTORAGE
-        if (Array.isArray(data.subjects) && data.subjects.length > 0) {
+        // ✅ FIX: Always use backend subjects as the source of truth
+        if (Array.isArray(data.subjects)) {
             customSubjects = data.subjects;
             console.log('Loaded subjects from backend:', customSubjects);
         } else {
-            // Fallback to localStorage only if backend has no subjects
-            customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
-            console.log('Loaded subjects from localStorage:', customSubjects);
-            
-            // If we have local subjects but no backend subjects, sync them
-            if (customSubjects.length > 0) {
-                await dataAPI.saveUserData(folders, customSubjects);
-            }
+            // If backend has no subjects, initialize with empty array
+            customSubjects = [];
+            console.log('No subjects found in backend, initializing empty');
         }
         
-        // Update localStorage as backup
+        // ✅ Always update localStorage to match backend
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
 
         // Update UI
@@ -4819,7 +4839,7 @@ async function addSubject(subjectName) {
     
     const subject = subjectName.trim();
     
-    // Check if subject already exists
+    // Check if subject already exists (case insensitive)
     const subjectExists = customSubjects.some(s => {
         const existingSubject = typeof s === 'string' ? s : (s.name || s.toString());
         return existingSubject.toLowerCase() === subject.toLowerCase();
@@ -4829,11 +4849,14 @@ async function addSubject(subjectName) {
         // Add to local array
         customSubjects.push(subject);
         
-        // ✅ CRITICAL: Save to database
+        // ✅ CRITICAL: Save to database and update all browsers
         try {
+            console.log('Saving subjects to database:', customSubjects);
             await dataAPI.saveUserData(folders, customSubjects);
+            
+            // ✅ Update localStorage to match
             localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
-            console.log('Subject saved to database:', subject);
+            console.log('Subject saved to database and localStorage:', subject);
             
             // Update UI
             renderSubjects();
@@ -4842,12 +4865,16 @@ async function addSubject(subjectName) {
             console.error('Failed to save subjects to database:', error);
             // Revert the change if save fails
             customSubjects = customSubjects.filter(s => s !== subject);
-            alert('Failed to save subject to database. Please try again.');
+            alert('Failed to save subject. Please try again.');
             return false;
         }
+    } else {
+        console.log('Subject already exists:', subject);
+        return true;
     }
-    return true; // Subject already exists
 }
+
+
 async function removeSubject(subjectToRemove) {
     if (confirm(`Delete subject "${subjectToRemove}"? This will remove it from the subject list but won't delete existing marks.`)) {
         // Remove from customSubjects array
@@ -4875,14 +4902,24 @@ async function removeSubject(subjectToRemove) {
 
 async function syncSubjects() {
     try {
+        console.log('Syncing subjects with backend...');
         const data = await dataAPI.getUserData();
+        
         if (Array.isArray(data.subjects)) {
+            // Use backend as source of truth
             customSubjects = data.subjects;
             localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
             renderSubjects();
+            console.log('Subjects synced from backend:', customSubjects);
+        } else {
+            // If no backend subjects, push local ones to backend
+            if (customSubjects.length > 0) {
+                await dataAPI.saveUserData(folders, customSubjects);
+                console.log('Local subjects pushed to backend:', customSubjects);
+            }
         }
     } catch (error) {
-        console.log('Failed to sync subjects:', error);
+        console.error('Sync failed:', error);
     }
 }
 
