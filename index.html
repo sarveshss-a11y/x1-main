@@ -1341,10 +1341,10 @@ const dataAPI = {
         }),
         // In your dataAPI object, update saveUserData:
  saveUserData: async (folders, subjects) => 
-        await apiRequest('/api/user/data', {
-            method: 'POST',
-            body: { folders, subjects },
-        }),
+    await apiRequest('/api/user/data', {
+        method: 'POST',
+        body: { folders, subjects },
+    }),
 };
 </script>
     </head>
@@ -1927,8 +1927,10 @@ async function checkApiConnection() {
 // ===============================
 // 🚀 INIT APP (safe version)
 // ===============================
-function initApp() {
+async function initApp() {
     // Load theme preference first
+        await syncSubjects();
+
     loadThemePreference();
     initAppUpdates();
         initChartAndResultFeatures();
@@ -4185,14 +4187,12 @@ async function loadUserData() {
 
         currentUser = data.user || { username: data.username || data.user?.username || 'User' };
         folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
-
-        // Load subjects from backend first, then fallback to localStorage
-        if (data.subjects && Array.isArray(data.subjects)) {
-            customSubjects = data.subjects;
-            localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
-        } else {
-            customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
-        }
+        
+        // Always use subjects from backend, don't fall back to localStorage
+        customSubjects = Array.isArray(data.subjects) ? data.subjects : [];
+        
+        // Update localStorage as backup only
+        localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
 
         // Update UI
         document.getElementById('user-name').textContent = currentUser.username || 'User';
@@ -4362,11 +4362,15 @@ function renderSubjects() {
         
         // Render subject tags with delete buttons
         customSubjects.forEach(subject => {
+            // Ensure subject is a string, not an object
+            const subjectName = typeof subject === 'string' ? subject : 
+                               (subject.name || subject.toString() || 'Unknown Subject');
+            
             const tag = document.createElement('span');
             tag.className = 'subject-tag';
             tag.innerHTML = `
-                ${subject}
-                <button class="delete-subject" onclick="removeSubject('${subject}')">×</button>
+                ${subjectName}
+                <button class="delete-subject" onclick="removeSubject('${subjectName.replace(/'/g, "\\'")}')">×</button>
             `;
             container.appendChild(tag);
         });
@@ -4379,13 +4383,24 @@ function renderSubjects() {
         // Clear and rebuild the dropdown
         subjectSelect.innerHTML = `
             <option value="">Select Subject</option>
-            ${customSubjects.map(subject => `<option value="${subject}">${subject}</option>`).join('')}
+            ${customSubjects.map(subject => {
+                const subjectName = typeof subject === 'string' ? subject : 
+                                   (subject.name || subject.toString() || 'Unknown Subject');
+                return `<option value="${subjectName}">${subjectName}</option>`;
+            }).join('')}
             <option value="other">Other (Add New)</option>
         `;
         
         // Restore previous selection if it still exists
-        if (currentValue && customSubjects.includes(currentValue)) {
-            subjectSelect.value = currentValue;
+        if (currentValue) {
+            const subjectExists = customSubjects.some(subject => {
+                const subjectName = typeof subject === 'string' ? subject : 
+                                   (subject.name || subject.toString() || 'Unknown Subject');
+                return subjectName === currentValue;
+            });
+            if (subjectExists) {
+                subjectSelect.value = currentValue;
+            }
         }
     }
 }
@@ -4419,15 +4434,23 @@ async function addSubject(subjectName = null) {
         return;
     }
     
-    if (!customSubjects.includes(subject)) {
+    // Check if subject already exists
+    const subjectExists = customSubjects.some(s => {
+        const existingSubject = typeof s === 'string' ? s : (s.name || s.toString());
+        return existingSubject === subject;
+    });
+    
+    if (!subjectExists) {
         customSubjects.push(subject);
-        localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
         
         // Save to database
         try {
             await dataAPI.saveUserData(folders, customSubjects);
+            localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
         } catch (error) {
-            console.log('Subjects saved locally only');
+            console.log('Failed to save subjects to database:', error);
+            // Still save locally as backup
+            localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
         }
         
         renderSubjects();
@@ -4444,27 +4467,47 @@ async function addSubject(subjectName = null) {
     }
 }
 
-async function removeSubject(subject) {
-    if (confirm(`Delete subject "${subject}"? This will remove it from the subject list but won't delete existing marks.`)) {
+async function removeSubject(subjectToRemove) {
+    if (confirm(`Delete subject "${subjectToRemove}"? This will remove it from the subject list but won't delete existing marks.`)) {
         // Remove from customSubjects array
-        customSubjects = customSubjects.filter(s => s !== subject);
-        localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+        customSubjects = customSubjects.filter(s => {
+            const existingSubject = typeof s === 'string' ? s : (s.name || s.toString());
+            return existingSubject !== subjectToRemove;
+        });
         
-        // Also update database if possible
+        // Update database and localStorage
         try {
             await dataAPI.saveUserData(folders, customSubjects);
+            localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
         } catch (error) {
-            console.log('Subjects updated locally only');
+            console.log('Failed to update subjects in database:', error);
+            localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
         }
         
         // Update UI
         renderSubjects();
-        updateMarksForm();
         
         // Show confirmation
-        alert(`Subject "${subject}" deleted successfully!`);
+        alert(`Subject "${subjectToRemove}" deleted successfully!`);
     }
 }
+
+async function syncSubjects() {
+    try {
+        const data = await dataAPI.getUserData();
+        if (Array.isArray(data.subjects)) {
+            customSubjects = data.subjects;
+            localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+            renderSubjects();
+        }
+    } catch (error) {
+        console.log('Failed to sync subjects:', error);
+    }
+}
+
+// Call this when the app loads
+// Add to your initApp function:
+
 // Helper function to show temporary messages
 
 
