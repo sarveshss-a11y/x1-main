@@ -1357,7 +1357,8 @@ const dataAPI = {
             method: 'DELETE',
         }),
         // In your dataAPI object, update saveUserData:
- saveUserData: async (folders, subjects) => 
+ // In your dataAPI object, make sure it looks like this:
+saveUserData: async (folders, subjects) => 
     await apiRequest('/api/user/data', {
         method: 'POST',
         body: { folders, subjects },
@@ -2159,8 +2160,22 @@ document.getElementById('download-round-selection-btn')?.addEventListener('click
   document.getElementById('signup-btn')?.addEventListener('click', handleSignup);
   document.getElementById('login-btn')?.addEventListener('click', handleLogin);
   document.getElementById('logout-btn')?.addEventListener('click', handleLogout);
-document.getElementById('add-subject-btn')?.addEventListener('click', addSubject);
-
+// Remove the old event listener and replace with this:
+const subjectSelect = document.getElementById('subject');
+if (subjectSelect) {
+    subjectSelect.addEventListener('change', function() {
+        if (this.value === 'other') {
+            const newSubject = prompt('Enter new subject name:');
+            if (newSubject && newSubject.trim()) {
+                // This will now be handled in addMarks function
+                // Just set the value to "other" and let addMarks handle it
+                this.value = 'other'; // Keep it as "other" so addMarks knows to process it
+            } else {
+                this.value = '';
+            }
+        }
+    });
+}
   // ---------------- Folder actions ----------------
   document.getElementById('create-folder-btn')?.addEventListener('click', createFolder);
 
@@ -3830,7 +3845,7 @@ async function addMarks(event) {
     
     const folderId = document.getElementById('marks-folder').value;
     
-    // FIX: Get subject value properly
+    // Get subject value
     let subject = '';
     const subjectElement = document.getElementById('subject');
     if (subjectElement) {
@@ -3860,7 +3875,7 @@ async function addMarks(event) {
         }
         finalSubject = newSubject.trim();
         
-        // ✅ ADD THIS: Save the new subject to database
+        // ✅ ADD THE SUBJECT TO DATABASE BEFORE ADDING MARKS
         await addSubject(finalSubject);
     }
 
@@ -4796,26 +4811,22 @@ function initAppUpdates() {
 }
 
 
-async function addSubject(subjectName = null) {
-    let subject = subjectName;
-    
-    if (!subject) {
-        const subjectInput = document.getElementById('new-subject');
-        subject = subjectInput ? subjectInput.value.trim() : '';
+async function addSubject(subjectName) {
+    if (!subjectName || !subjectName.trim()) {
+        console.error('Invalid subject name');
+        return false;
     }
     
-    if (!subject) {
-        alert('Please enter a subject name');
-        return;
-    }
+    const subject = subjectName.trim();
     
     // Check if subject already exists
     const subjectExists = customSubjects.some(s => {
         const existingSubject = typeof s === 'string' ? s : (s.name || s.toString());
-        return existingSubject === subject;
+        return existingSubject.toLowerCase() === subject.toLowerCase();
     });
     
     if (!subjectExists) {
+        // Add to local array
         customSubjects.push(subject);
         
         // ✅ CRITICAL: Save to database
@@ -4823,21 +4834,20 @@ async function addSubject(subjectName = null) {
             await dataAPI.saveUserData(folders, customSubjects);
             localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
             console.log('Subject saved to database:', subject);
+            
+            // Update UI
+            renderSubjects();
+            return true;
         } catch (error) {
             console.error('Failed to save subjects to database:', error);
-            // Still save locally as backup
-            localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
-            alert('Subject saved locally, but failed to sync with database.');
+            // Revert the change if save fails
+            customSubjects = customSubjects.filter(s => s !== subject);
+            alert('Failed to save subject to database. Please try again.');
+            return false;
         }
-        
-        renderSubjects();
-        
-        alert(`Subject "${subject}" added successfully!`);
-    } else {
-        alert(`Subject "${subject}" already exists!`);
     }
+    return true; // Subject already exists
 }
-
 async function removeSubject(subjectToRemove) {
     if (confirm(`Delete subject "${subjectToRemove}"? This will remove it from the subject list but won't delete existing marks.`)) {
         // Remove from customSubjects array
@@ -4930,7 +4940,18 @@ function editMark(folderId, markId) {
 
 
 
+async function debugSubjectSave() {
+    console.log('Current customSubjects:', customSubjects);
+    try {
+        const userData = await dataAPI.getUserData();
+        console.log('Backend subjects:', userData.subjects);
+        console.log('Are they the same?', JSON.stringify(customSubjects) === JSON.stringify(userData.subjects));
+    } catch (error) {
+        console.error('Error checking backend:', error);
+    }
+}
 
+// Call this after adding a subject to verify
 
 // Populate folder dropdowns (marks form + marks table filter)
 // ===============================
