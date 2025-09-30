@@ -1340,11 +1340,11 @@ const dataAPI = {
             method: 'DELETE',
         }),
         // In your dataAPI object, update saveUserData:
-saveUserData: async (folders, subjects) => 
-    await apiRequest('/api/user/data', {
-        method: 'POST',
-        body: { folders, subjects },
-    }),
+ saveUserData: async (folders, subjects) => 
+        await apiRequest('/api/user/data', {
+            method: 'POST',
+            body: { folders, subjects },
+        }),
 };
 </script>
     </head>
@@ -1583,10 +1583,7 @@ saveUserData: async (folders, subjects) =>
                             <h3 class="form-title">Add New Marks</h3>
                             <div class="form-group">
         <label>Manage Subjects</label>
-        <div class="subject-input-container">
-            <input type="text" id="new-subject" class="form-control" placeholder="New subject name">
-            <button class="btn btn-success" id="add-subject-btn">Add Subject</button>
-        </div>
+        
         <div class="subjects-list" id="subjects-list">
             <!-- Subjects will appear here as tags -->
         </div>
@@ -4183,38 +4180,34 @@ function clearUI() {
 // ===============================
 // Update this function to maintain the global marks array
 async function loadUserData() {
-  try {
-    const data = await dataAPI.getUserData();
+    try {
+        const data = await dataAPI.getUserData();
 
-    currentUser = data.user || { username: data.username || data.user?.username || 'User' };
-    folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
+        currentUser = data.user || { username: data.username || data.user?.username || 'User' };
+        folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
 
-    // Update the global marks array with ALL marks
-    marks = collectAllMarks(folders);
+        // Load subjects from backend first, then fallback to localStorage
+        if (data.subjects && Array.isArray(data.subjects)) {
+            customSubjects = data.subjects;
+            localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+        } else {
+            customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
+        }
 
-    // Load subjects
-    if (data.subjects && Array.isArray(data.subjects)) {
-        customSubjects = data.subjects;
-        localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
-    } else {
-        customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
+        // Update UI
+        document.getElementById('user-name').textContent = currentUser.username || 'User';
+        document.getElementById('user-avatar').textContent = (currentUser.username || 'U').charAt(0).toUpperCase();
+
+        renderFolders();
+        populateFolderSelect();
+        renderMarksTable();
+        updateStats();
+        renderChart();
+        renderSubjects();
+
+    } catch (err) {
+        console.error('Error loading user data:', err);
     }
-
-    // Update UI
-    document.getElementById('user-name').textContent = currentUser.username || 'User';
-    document.getElementById('user-avatar').textContent = (currentUser.username || 'U').charAt(0).toUpperCase();
-
-    renderFolders();
-    populateFolderSelect();
-    renderMarksTable();
-    updateStats(); // Make sure this is called
-    renderChart();
-    renderSubjects();
-
-  } catch (err) {
-    console.error('Error loading user data:', err);
-    showError('login-error', err.message || 'Failed to load user data.');
-  }
 }
 
 
@@ -4380,8 +4373,10 @@ function renderSubjects() {
     }
     
     // Update subject dropdown in marks form
-    if (subjectSelect && subjectSelect.tagName === 'SELECT') {
+    if (subjectSelect) {
         const currentValue = subjectSelect.value;
+        
+        // Clear and rebuild the dropdown
         subjectSelect.innerHTML = `
             <option value="">Select Subject</option>
             ${customSubjects.map(subject => `<option value="${subject}">${subject}</option>`).join('')}
@@ -4411,7 +4406,7 @@ function initAppUpdates() {
 }
 
 
-function addSubject(subjectName = null) {
+async function addSubject(subjectName = null) {
     let subject = subjectName;
     
     if (!subject) {
@@ -4428,15 +4423,14 @@ function addSubject(subjectName = null) {
         customSubjects.push(subject);
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
         
-        // Also save to database if possible
+        // Save to database
         try {
-            dataAPI.saveUserData(folders, customSubjects);
+            await dataAPI.saveUserData(folders, customSubjects);
         } catch (error) {
             console.log('Subjects saved locally only');
         }
         
         renderSubjects();
-        updateMarksForm();
         
         // Clear input if it was from the form
         if (!subjectName) {
