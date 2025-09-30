@@ -2475,7 +2475,7 @@ function filterMarksByFolder() {
     }
     
     renderMarksTable();
-    renderChart(); // Chart updates to show selected folder only
+    renderChart(); // Update chart when folder filter changes
 }
 
 
@@ -2926,7 +2926,7 @@ function generatePDFResult(studentName, rollNumber, schoolName, imageDataURL) {
         grandGrade
     ]);
     
-    // Generate summary table
+    // Generate summary table - FIXED VERSION
     doc.autoTable({
         startY: yPosition,
         head: summaryHeaders,
@@ -2947,11 +2947,13 @@ function generatePDFResult(studentName, rollNumber, schoolName, imageDataURL) {
             fontSize: 10,
             cellPadding: 4
         },
+        // FIXED: Use the correct method name for styling
         willDrawCell: function (data) {
             if (data.section === 'body' && data.row.index === summaryData.length - 1) {
                 doc.setFillColor(24, 52, 193);
                 doc.setTextColor(255, 255, 255);
-                doc.setFontStyle('bold');
+                // Use setFont instead of setFontStyle
+                doc.setFont(undefined, 'bold');
             }
         }
     });
@@ -3340,8 +3342,7 @@ async function deleteAccount() {
             </div>
         `;
 
-        // Click to select folder
-     // In your renderFolders function, update the click event:
+      // In your renderFolders function, update the click event:
 folderItem.addEventListener('click', (e) => {
     if (!e.target.closest('.folder-actions')) {
         selectedFolderId = folder.id;
@@ -3836,94 +3837,132 @@ function renderMultiRoundChart(roundIds) {
 // Add this function call at the end of your initApp function
 
 function renderChart() {
-    const ctx = document.getElementById('progress-chart').getContext('2d');
+    const ctx = document.getElementById('progress-chart');
+    if (!ctx) return;
+    
+    const chartContext = ctx.getContext('2d');
     if (chart) chart.destroy();
 
-    // Only show marks from selected folder
+    // Clear any existing error
+    ctx.innerHTML = '';
+
+    // Get marks for the selected folder only
     let marksToShow = [];
-    if (selectedFolderId) {
-        const folder = folders.find(f => f.id === selectedFolderId);
-        marksToShow = folder ? (folder.marks || []) : [];
+    let folderName = 'All Folders';
+
+    if (selectedFolderId && selectedFolderId !== 'all') {
+        // Find the selected folder and get its marks
+        const folder = findFolderById(selectedFolderId);
+        if (folder) {
+            marksToShow = folder.marks || [];
+            folderName = folder.name;
+        }
     } else {
-        // If no folder selected, show empty chart
-        marksToShow = [];
+        // Show all marks if no folder selected or "all" is selected
+        marksToShow = collectAllMarks(folders);
+        folderName = 'All Folders';
     }
 
+    // Show empty state if no marks
     if (marksToShow.length === 0) {
-        // Show empty chart message
-        ctx.font = "16px Arial";
-        ctx.fillStyle = "#666";
-        ctx.textAlign = "center";
-        ctx.fillText("No marks available for selected folder", ctx.canvas.width / 2, ctx.canvas.height / 2);
+        chartContext.font = "16px Arial";
+        chartContext.fillStyle = "#666";
+        chartContext.textAlign = "center";
+        chartContext.fillText("No marks available for selected folder", ctx.width / 2, ctx.height / 2);
         return;
     }
 
-    const labels = marksToShow.map(m => m.subject);
-    const percentages = marksToShow.map(m => 
-        m.totalMarks > 0 ? ((m.marksObtained / m.totalMarks) * 100).toFixed(2) : 0
-    );
+    // Group marks by subject to calculate averages
+    const subjectData = {};
+    marksToShow.forEach(mark => {
+        if (!subjectData[mark.subject]) {
+            subjectData[mark.subject] = {
+                totalObtained: 0,
+                totalMarks: 0,
+                count: 0
+            };
+        }
+        subjectData[mark.subject].totalObtained += Number(mark.marksObtained) || 0;
+        subjectData[mark.subject].totalMarks += Number(mark.totalMarks) || 0;
+        subjectData[mark.subject].count++;
+    });
 
-    // Get current folder name for chart title
-    const currentFolder = folders.find(f => f.id === selectedFolderId);
-    const folderName = currentFolder ? currentFolder.name : 'Selected Folder';
+    // Calculate average percentages per subject
+    const labels = Object.keys(subjectData);
+    const percentages = labels.map(subject => {
+        const data = subjectData[subject];
+        return data.totalMarks > 0 ? 
+            ((data.totalObtained / data.totalMarks) * 100).toFixed(2) : 0;
+    });
 
-    chart = new Chart(ctx, {
-        type: chartType,
-        data: {
-            labels,
-            datasets: [{
-                label: `Percentage - ${folderName}`,
-                data: percentages,
-                backgroundColor: percentages.map(p =>
-                    p >= 75 ? 'rgba(6,214,160,0.7)' :
-                    p >= 40 ? 'rgba(255,209,102,0.7)' :
-                              'rgba(239,71,111,0.7)'
-                ),
-                borderColor: 'rgba(0,0,0,0.1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-                title: {
-                    display: true,
-                    text: `Performance Chart - ${folderName}`,
-                    font: {
-                        size: 16
-                    }
-                },
-                legend: { 
-                    display: chartType === 'pie' || chartType === 'doughnut'
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const mark = marksToShow[context.dataIndex];
-                            return `${mark.subject}: ${mark.marksObtained}/${mark.totalMarks} (${context.raw}%)`;
+    // Create chart
+    try {
+        chart = new Chart(chartContext, {
+            type: chartType,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: `Average Percentage - ${folderName}`,
+                    data: percentages,
+                    backgroundColor: percentages.map(p => {
+                        const percentage = parseFloat(p);
+                        return percentage >= 75 ? 'rgba(6,214,160,0.7)' :
+                               percentage >= 40 ? 'rgba(255,209,102,0.7)' :
+                               'rgba(239,71,111,0.7)';
+                    }),
+                    borderColor: 'rgba(0,0,0,0.2)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: `Performance Chart - ${folderName}`,
+                        font: {
+                            size: 16
+                        }
+                    },
+                    legend: {
+                        display: chartType === 'pie' || chartType === 'doughnut' || chartType === 'radar'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const subject = labels[context.dataIndex];
+                                const data = subjectData[subject];
+                                return `${subject}: ${data.totalObtained}/${data.totalMarks} (${context.raw}%)`;
+                            }
                         }
                     }
-                }
-            },
-            scales: { 
-                y: { 
-                    beginAtZero: true, 
-                    max: 100,
-                    title: {
-                        display: true,
-                        text: 'Percentage (%)'
-                    }
                 },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Subjects'
+                scales: chartType !== 'pie' && chartType !== 'doughnut' ? {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Percentage (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Subjects'
+                        }
                     }
-                }
+                } : {}
             }
-        }
-    });
+        });
+    } catch (error) {
+        console.error('Error creating chart:', error);
+        chartContext.font = "14px Arial";
+        chartContext.fillStyle = "#ff0000";
+        chartContext.textAlign = "center";
+        chartContext.fillText("Error creating chart", ctx.width / 2, ctx.height / 2);
+    }
 }
 
 
@@ -3931,14 +3970,19 @@ function renderChart() {
 
 
 // Add this helper function to find folder by ID
-function findFolderById(folders, id) {
-    for (const folder of folders) {
-        if (folder.id === id) return folder;
+function findFolderById(folderId, folderList = folders) {
+    if (!folderId || !folderList) return null;
+    
+    for (const folder of folderList) {
+        if (folder.id === folderId) return folder;
+        
+        // Recursively search in subfolders
         if (folder.subfolders && folder.subfolders.length > 0) {
-            const found = findFolderById(folder.subfolders, id);
+            const found = findFolderById(folderId, folder.subfolders);
             if (found) return found;
         }
     }
+    
     return null;
 }
 
@@ -4006,49 +4050,7 @@ function updateStats() {
 // ===============================
 // 📈 RENDER CHART
 // ===============================
-function renderChart() {
-    const ctx = document.getElementById('progress-chart').getContext('2d');
-    if (chart) chart.destroy();
 
-    const labels = marks.map(m => m.subject);
-    const percentages = marks.map(m => 
-        m.totalMarks > 0 ? ((m.marksObtained / m.totalMarks) * 100).toFixed(2) : 0
-    );
-
-    chart = new Chart(ctx, {
-        type: chartType,
-        data: {
-            labels,
-            datasets: [{
-                label: 'Percentage',
-                data: percentages,
-                backgroundColor: percentages.map(p =>
-                    p >= 75 ? 'rgba(6,214,160,0.7)' :
-                    p >= 40 ? 'rgba(255,209,102,0.7)' :
-                              'rgba(239,71,111,0.7)'
-                ),
-                borderColor: 'rgba(0,0,0,0.1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,  // ✅ respect CSS height
-            plugins: { 
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const mark = marks[context.dataIndex];
-                            return `${mark.marksObtained}/${mark.totalMarks} (${context.raw}%)`;
-                        }
-                    }
-                }
-            },
-            scales: { y: { beginAtZero: true, max: 100 } }
-        }
-    });
-}
 
 
  
@@ -4214,6 +4216,20 @@ async function loadUserData() {
     showError('login-error', err.message || 'Failed to load user data.');
   }
 }
+
+
+function debugFolderSelection() {
+    console.log('Selected Folder ID:', selectedFolderId);
+    console.log('All Folders:', folders);
+    
+    if (selectedFolderId) {
+        const folder = findFolderById(selectedFolderId);
+        console.log('Selected Folder:', folder);
+        console.log('Folder Marks:', folder ? folder.marks : []);
+    }
+}
+
+// Call this from browser console if needed
 
 function debugStats() {
     const allMarks = collectAllMarks(folders);
