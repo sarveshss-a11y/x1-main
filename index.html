@@ -4,6 +4,8 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Marks Explorer with Data Persistence</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script
             src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
@@ -124,6 +126,21 @@ body.dark-mode #average-percentage {
             color: #f8f9fa;
         }
 
+.download-btn {
+    margin-top: 0;
+    flex: 1;
+}
+
+.progress-report .download-btn {
+    margin-top: 0;
+}
+
+@media (max-width: 768px) {
+    .progress-report .download-btn {
+        flex: 100%;
+        margin-top: 10px;
+    }
+}
         body.dark-theme .form-control:focus {
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.3);
@@ -1666,10 +1683,17 @@ const dataAPI = {
                             <div class="chart-container">
                                 <canvas id="progress-chart"></canvas>
                             </div>
-                            <button class="btn btn-info download-btn"
-                                id="download-report-btn">Download
-                                Report</button>
-                        </div>
+                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+        <button class="btn btn-info download-btn" id="download-chart-btn">
+            Download Current Chart
+        </button>
+        <button class="btn btn-success download-btn" id="download-all-charts-btn">
+            Download All Charts as ZIP
+        </button>
+        <button class="btn btn-warning download-btn" id="download-round-selection-btn">
+            Multi-Round Charts
+        </button>
+    </div>
                     </div>
                 </div>
             </div>
@@ -1921,6 +1945,29 @@ async function checkApiConnection() {
 }
 }
 
+const authenticateToken = async (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).send({ message: 'Access token required' });
+    }
+
+    try {
+        req.user = verifyToken(token);
+        
+        // Verify user still exists in database
+        const user = await User.findById(req.user.userId);
+        if (!user) {
+            return res.status(401).send({ message: 'User no longer exists' });
+        }
+        
+        next();
+    } catch (err) {
+        console.error('Authentication error:', err.message);
+        return res.status(403).send({ message: 'Invalid or expired token' });
+    }
+};
 
 // Initialize the app
 // Initialize the app when the DOM is loaded
@@ -1929,16 +1976,16 @@ async function checkApiConnection() {
 // ===============================
 async function initApp() {
     // Load theme preference first
-        await syncSubjects();
-
     loadThemePreference();
     initAppUpdates();
-        initChartAndResultFeatures();
+    initChartAndResultFeatures();
+    
+    // Load subjects from localStorage as initial state
     customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
 
     // Setup password toggles
     setupPasswordToggles();
-        renderSubjects();
+    renderSubjects();
 
     // Restore chart type preference
     const chartSelect = document.getElementById("chart-type-select");
@@ -1946,28 +1993,73 @@ async function initApp() {
         chartSelect.value = chartType;
     }
     
-    // Check authentication status
+    // Check authentication status with better error handling
     const token = localStorage.getItem("authToken");
     if (token) {
-        loadUserData()
-            .then(() => checkApiConnection())
-            .catch(err => {
-                console.error("Auto-login failed:", err.message);
-                localStorage.removeItem("authToken");
-                showPage("login-page");
-                checkApiConnection();
-            });
+        try {
+            // Verify token is valid before attempting to load data
+            await validateToken(token);
+            await loadUserData();
+            showPage("app-page");
+        } catch (err) {
+            console.error("Auto-login failed:", err.message);
+            // Clear invalid token
+            localStorage.removeItem("authToken");
+            localStorage.removeItem('localBackupData');
+            showPage("login-page");
+        }
     } else {
         showPage("login-page");
-        checkApiConnection();
     }
     
+    // Check API connection
+    await checkApiConnection();
+    
     // SETUP EVENT LISTENERS AFTER DOM IS READY
-    // Use setTimeout to ensure DOM is fully parsed
     setTimeout(() => {
         setupEventListeners();
     }, 0);
 }
+
+// Add token validation function
+async function validateToken(token) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/user`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Token validation failed');
+        }
+        
+        return true;
+    } catch (error) {
+        throw new Error('Invalid token');
+    }
+}
+
+// Add periodic token refresh (optional)
+function startTokenRefresh() {
+    // Refresh token every 15 minutes
+    setInterval(async () => {
+        const token = localStorage.getItem('authToken');
+        if (token && currentUser) {
+            try {
+                await validateToken(token);
+                console.log('Token is still valid');
+            } catch (error) {
+                console.log('Token refresh needed');
+                // You could implement token refresh logic here
+            }
+        }
+    }, 15 * 60 * 1000); // 15 minutes
+}
+
+// Call this after successful login
+// Add to your handleLogin function after successful login:
+// startTokenRefresh();
 
 // Start the app when DOM is ready
 if (document.readyState === 'loading') {
@@ -2020,6 +2112,21 @@ function handleImportData(event) {
   reader.readAsText(file);
 }
 
+async function debugSubjects() {
+    console.log('=== SUBJECTS DEBUG ===');
+    console.log('Current customSubjects:', customSubjects);
+    console.log('LocalStorage subjects:', JSON.parse(localStorage.getItem('customSubjects') || '[]'));
+    
+    try {
+        const userData = await dataAPI.getUserData();
+        console.log('Backend subjects:', userData.subjects);
+        console.log('Backend folders:', userData.folders);
+    } catch (error) {
+        console.error('Error fetching user data:', error);
+    }
+}
+
+// Call this from browser console to check: debugSubjects()
 // Add this to functions that modify data:
 function backupDataLocally() {
     const backupData = {
@@ -2038,6 +2145,11 @@ document.getElementById('debug-stats-btn')?.addEventListener('click', debugStats
     document.getElementById('download-report-btn')?.addEventListener('click', showRoundSelectionModal);
 document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
     document.getElementById('retry-api-btn')?.addEventListener('click', checkApiConnection);
+    // Chart download buttons
+document.getElementById('download-chart-btn')?.addEventListener('click', downloadCurrentChart);
+document.getElementById('download-all-charts-btn')?.addEventListener('click', downloadAllChartsAsZip);
+document.getElementById('download-round-selection-btn')?.addEventListener('click', showRoundSelectionModal);
+
 
   // ---------------- Auth navigation ----------------
   document.getElementById('login-link')?.addEventListener('click', () => showPage('login-page'));
@@ -3359,7 +3471,236 @@ folderItem.addEventListener('click', (e) => {
     });
 }
 
+// Download current chart as PNG
+async function downloadCurrentChart() {
+    const canvas = document.getElementById('progress-chart');
+    if (!canvas) {
+        alert('No chart available to download');
+        return;
+    }
+    
+    try {
+        const dataURL = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `chart-${new Date().toISOString().split('T')[0]}.png`;
+        link.href = dataURL;
+        link.click();
+    } catch (error) {
+        console.error('Error downloading chart:', error);
+        alert('Failed to download chart');
+    }
+}
 
+// Download all charts as ZIP
+async function downloadAllChartsAsZip() {
+    try {
+        const zip = new JSZip();
+        const folder = zip.folder("charts");
+        const timestamp = new Date().toISOString().split('T')[0];
+        
+        // 1. Current main chart
+        const mainCanvas = document.getElementById('progress-chart');
+        if (mainCanvas) {
+            const mainChartData = mainCanvas.toDataURL('image/png').split(',')[1];
+            folder.file(`main-chart-${timestamp}.png`, mainChartData, {base64: true});
+        }
+        
+        // 2. Generate charts for each folder
+        for (const folderData of folders) {
+            if (folderData.marks && folderData.marks.length > 0) {
+                const folderChart = await generateFolderChart(folderData);
+                if (folderChart) {
+                    const chartData = folderChart.toDataURL('image/png').split(',')[1];
+                    folder.file(`chart-${folderData.name}-${timestamp}.png`, chartData, {base64: true});
+                }
+            }
+        }
+        
+        // 3. Generate comparison chart if multiple folders
+        if (folders.length > 1) {
+            const comparisonChart = await generateComparisonChart();
+            if (comparisonChart) {
+                const chartData = comparisonChart.toDataURL('image/png').split(',')[1];
+                folder.file(`comparison-chart-${timestamp}.png`, chartData, {base64: true});
+            }
+        }
+        
+        // Create and download ZIP
+        const content = await zip.generateAsync({type: "blob"});
+        saveAs(content, `charts-${timestamp}.zip`);
+        
+        alert(`Downloaded ${Object.keys(zip.files).length} chart files`);
+        
+    } catch (error) {
+        console.error('Error creating ZIP file:', error);
+        alert('Failed to create ZIP file');
+    }
+}
+
+// Generate chart for a specific folder
+async function generateFolderChart(folderData) {
+    return new Promise((resolve) => {
+        // Create temporary canvas
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 800;
+        tempCanvas.height = 400;
+        const ctx = tempCanvas.getContext('2d');
+        
+        // Group marks by subject
+        const subjectData = {};
+        folderData.marks.forEach(mark => {
+            if (!subjectData[mark.subject]) {
+                subjectData[mark.subject] = {
+                    totalObtained: 0,
+                    totalMarks: 0,
+                    count: 0
+                };
+            }
+            subjectData[mark.subject].totalObtained += Number(mark.marksObtained) || 0;
+            subjectData[mark.subject].totalMarks += Number(mark.totalMarks) || 0;
+            subjectData[mark.subject].count++;
+        });
+        
+        const labels = Object.keys(subjectData);
+        const percentages = labels.map(subject => {
+            const data = subjectData[subject];
+            return data.totalMarks > 0 ? 
+                ((data.totalObtained / data.totalMarks) * 100).toFixed(2) : 0;
+        });
+        
+        try {
+            const tempChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `Performance - ${folderData.name}`,
+                        data: percentages,
+                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Performance Chart - ${folderData.name}`,
+                            font: { size: 16 }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: 'Percentage (%)' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Subjects' }
+                        }
+                    }
+                }
+            });
+            
+            setTimeout(() => {
+                resolve(tempCanvas);
+                tempChart.destroy();
+            }, 500);
+            
+        } catch (error) {
+            console.error('Error generating folder chart:', error);
+            resolve(null);
+        }
+    });
+}
+
+// Generate comparison chart
+async function generateComparisonChart() {
+    return new Promise((resolve) => {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 800;
+        tempCanvas.height = 400;
+        const ctx = tempCanvas.getContext('2d');
+        
+        try {
+            // Get all unique subjects
+            const allSubjects = new Set();
+            const folderData = [];
+            
+            folders.forEach(folder => {
+                if (folder.marks && folder.marks.length > 0) {
+                    const marks = folder.marks;
+                    marks.forEach(mark => allSubjects.add(mark.subject));
+                    folderData.push({ folder, marks });
+                }
+            });
+            
+            const subjects = Array.from(allSubjects);
+            const datasets = [];
+            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
+            
+            folderData.forEach((data, index) => {
+                const folder = data.folder;
+                const marks = data.marks;
+                
+                const dataPoints = subjects.map(subject => {
+                    const subjectMarks = marks.filter(m => m.subject === subject);
+                    if (subjectMarks.length === 0) return 0;
+                    
+                    const avgPercentage = subjectMarks.reduce((sum, m) => 
+                        sum + (m.marksObtained / m.totalMarks * 100), 0) / subjectMarks.length;
+                    return Math.round(avgPercentage * 100) / 100;
+                });
+                
+                datasets.push({
+                    label: folder.name,
+                    data: dataPoints,
+                    backgroundColor: colors[index % colors.length],
+                    borderColor: colors[index % colors.length],
+                    borderWidth: 2
+                });
+            });
+            
+            const tempChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: subjects,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Multi-Round Comparison Chart',
+                            font: { size: 16 }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: 'Percentage (%)' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Subjects' }
+                        }
+                    }
+                }
+            });
+            
+            setTimeout(() => {
+                resolve(tempCanvas);
+                tempChart.destroy();
+            }, 500);
+            
+        } catch (error) {
+            console.error('Error generating comparison chart:', error);
+            resolve(null);
+        }
+    });
+}
 
 
 
@@ -3518,7 +3859,9 @@ async function addMarks(event) {
             return;
         }
         finalSubject = newSubject.trim();
-        addSubject(finalSubject);
+        
+        // ✅ ADD THIS: Save the new subject to database
+        await addSubject(finalSubject);
     }
 
     try {
@@ -4188,10 +4531,22 @@ async function loadUserData() {
         currentUser = data.user || { username: data.username || data.user?.username || 'User' };
         folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
         
-        // Always use subjects from backend, don't fall back to localStorage
-        customSubjects = Array.isArray(data.subjects) ? data.subjects : [];
+        // ✅ PRIORITIZE BACKEND SUBJECTS OVER LOCALSTORAGE
+        if (Array.isArray(data.subjects) && data.subjects.length > 0) {
+            customSubjects = data.subjects;
+            console.log('Loaded subjects from backend:', customSubjects);
+        } else {
+            // Fallback to localStorage only if backend has no subjects
+            customSubjects = JSON.parse(localStorage.getItem('customSubjects')) || [];
+            console.log('Loaded subjects from localStorage:', customSubjects);
+            
+            // If we have local subjects but no backend subjects, sync them
+            if (customSubjects.length > 0) {
+                await dataAPI.saveUserData(folders, customSubjects);
+            }
+        }
         
-        // Update localStorage as backup only
+        // Update localStorage as backup
         localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
 
         // Update UI
@@ -4209,6 +4564,26 @@ async function loadUserData() {
         console.error('Error loading user data:', err);
     }
 }
+
+async function testSubjectFlow() {
+    console.log('Testing subject flow...');
+    
+    // Test 1: Check current state
+    await debugSubjects();
+    
+    // Test 2: Add a test subject
+    const testSubject = `TestSubject-${Date.now()}`;
+    console.log('Adding test subject:', testSubject);
+    await addSubject(testSubject);
+    
+    // Test 3: Verify it was saved
+    setTimeout(async () => {
+        await debugSubjects();
+        console.log('Subject flow test completed');
+    }, 1000);
+}
+
+// Call from browser console: testSubjectFlow()
 
 
 function debugFolderSelection() {
@@ -4443,23 +4818,19 @@ async function addSubject(subjectName = null) {
     if (!subjectExists) {
         customSubjects.push(subject);
         
-        // Save to database
+        // ✅ CRITICAL: Save to database
         try {
             await dataAPI.saveUserData(folders, customSubjects);
             localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+            console.log('Subject saved to database:', subject);
         } catch (error) {
-            console.log('Failed to save subjects to database:', error);
+            console.error('Failed to save subjects to database:', error);
             // Still save locally as backup
             localStorage.setItem('customSubjects', JSON.stringify(customSubjects));
+            alert('Subject saved locally, but failed to sync with database.');
         }
         
         renderSubjects();
-        
-        // Clear input if it was from the form
-        if (!subjectName) {
-            const subjectInput = document.getElementById('new-subject');
-            if (subjectInput) subjectInput.value = '';
-        }
         
         alert(`Subject "${subject}" added successfully!`);
     } else {
