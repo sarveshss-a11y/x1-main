@@ -34,6 +34,21 @@
     transition: var(--transition);
 }
 
+/* Ensure page visibility is controlled properly */
+.page {
+    display: none;
+}
+
+.page.active {
+    display: block;
+}
+
+/* Make sure settings page has proper styling */
+#settings-page {
+    min-height: 100vh;
+    background: inherit;
+}
+
 .folder-tree-content:hover {
     background-color: rgba(255, 255, 255, 0.1);
 }
@@ -2201,6 +2216,52 @@ if (subjectSelect) {
         }
     });
 }
+
+    console.log('Setting up event listeners...');
+    
+    // Add debug button temporarily
+    const debugBtn = document.createElement('button');
+    debugBtn.textContent = 'Debug Pages';
+    debugBtn.style.position = 'fixed';
+    debugBtn.style.top = '10px';
+    debugBtn.style.right = '10px';
+    debugBtn.style.zIndex = '10000';
+    debugBtn.style.background = 'red';
+    debugBtn.style.color = 'white';
+    debugBtn.onclick = debugPages;
+    document.body.appendChild(debugBtn);
+
+    // ---------------- Settings navigation ----------------
+    const settingsBtn = document.getElementById('settings-btn');
+    if (settingsBtn) {
+        console.log('Settings button found, adding click listener');
+        settingsBtn.addEventListener('click', () => {
+            console.log('Settings button clicked');
+            showPage('settings-page');
+        });
+    } else {
+        console.error('Settings button not found!');
+    }
+
+    const backBtn = document.getElementById('back-btn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            console.log('Back button clicked');
+            showPage('app-page');
+        });
+    }
+
+    // ---------------- Auth navigation ----------------
+    document.getElementById('login-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        showPage('login-page');
+    });
+    
+    document.getElementById('signup-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        showPage('signup-page');
+    });
+
   // ---------------- Folder actions ----------------
   document.getElementById('create-folder-btn')?.addEventListener('click', createFolder);
 
@@ -4141,6 +4202,26 @@ function clearExpiredToken() {
     location.reload();
 }
 
+function debugPages() {
+    console.log('=== PAGE DEBUG ===');
+    const pages = document.querySelectorAll('.page');
+    pages.forEach(page => {
+        console.log(`Page ${page.id}:`, {
+            active: page.classList.contains('active'),
+            display: window.getComputedStyle(page).display,
+            exists: !!page
+        });
+    });
+    
+    // Check if settings button exists
+    const settingsBtn = document.getElementById('settings-btn');
+    console.log('Settings button:', {
+        exists: !!settingsBtn,
+        onclick: settingsBtn?.onclick
+    });
+}
+
+// Call this in your browser console: debugPages()
 
 function renderMultiRoundChart(roundIds) {
     const ctx = document.getElementById('progress-chart');
@@ -4512,15 +4593,33 @@ function updateFolderSelects() {
 
 // Utility functions
 function showPage(pageId) {
+    console.log(`Attempting to show page: ${pageId}`);
+    
+    // Hide all pages
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
+        page.style.display = 'none';
     });
-    document.getElementById(pageId).classList.add('active');
     
-    // Reinitialize password toggles for the new page
-    setTimeout(() => {
-        setupPasswordToggles();
-    }, 200);
+    // Show the target page
+    const targetPage = document.getElementById(pageId);
+    if (targetPage) {
+        targetPage.classList.add('active');
+        targetPage.style.display = 'block';
+        console.log(`Successfully showed page: ${pageId}`);
+    } else {
+        console.error(`Page not found: ${pageId}`);
+        // Fallback to app page
+        const fallbackPage = document.getElementById('app-page');
+        if (fallbackPage) {
+            fallbackPage.classList.add('active');
+            fallbackPage.style.display = 'block';
+        }
+    }
+    
+    // Debug: log current active page
+    const activePage = document.querySelector('.page.active');
+    console.log('Current active page:', activePage?.id);
 }
 
 function showModal(modalId) {
