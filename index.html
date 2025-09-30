@@ -2204,7 +2204,6 @@ function backupDataLocally() {
 // Event Listeners
 function setupEventListeners() {
     // Add this to your setupEventListeners function temporarily:
-document.getElementById('debug-stats-btn')?.addEventListener('click', debugStats);
     document.getElementById('download-report-btn')?.addEventListener('click', showRoundSelectionModal);
 document.getElementById('generate-chart-btn')?.addEventListener('click', generateMultiRoundChart);
     document.getElementById('retry-api-btn')?.addEventListener('click', checkApiConnection);
@@ -2242,16 +2241,7 @@ if (subjectSelect) {
     console.log('Setting up event listeners...');
     
     // Add debug button temporarily
-    const debugBtn = document.createElement('button');
-    debugBtn.textContent = 'Debug Pages';
-    debugBtn.style.position = 'fixed';
-    debugBtn.style.top = '10px';
-    debugBtn.style.right = '10px';
-    debugBtn.style.zIndex = '10000';
-    debugBtn.style.background = 'red';
-    debugBtn.style.color = 'white';
-    debugBtn.onclick = debugPages;
-    document.body.appendChild(debugBtn);
+   
 
     // ---------------- Settings navigation ----------------
     const settingsBtn = document.getElementById('settings-btn');
