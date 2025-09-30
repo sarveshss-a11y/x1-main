@@ -2586,6 +2586,7 @@ function findFolderById(id, list = folders) {
 
 // Helper function to collect all marks from folders and subfolders
 // Enhanced collectAllMarks function
+// Enhanced collectAllMarks function
 function collectAllMarks(folderList) {
     const allMarks = [];
     
@@ -2614,6 +2615,7 @@ function collectAllMarks(folderList) {
     }
     
     extractMarks(folderList);
+    console.log(`Collected ${allMarks.length} marks from ${folderList.length} folders`);
     return allMarks;
 }
 
@@ -3987,12 +3989,6 @@ async function addMarks() {
         return;
     }
 
-        const folderExists = folders.some(folder => folder.id === folderId);
-    if (!folderExists) {
-        alert('Selected folder does not exist. Please refresh and try again.');
-        return;
-    }
-
     let finalSubject = subject.trim();
     
     // If subject is "other", prompt for new subject
@@ -4031,13 +4027,13 @@ async function addMarks() {
         
         console.log('Marks saved successfully');
         
+        // CRITICAL: Refresh ALL data from server to ensure UI is in sync
+        await loadUserData();
+        
         // Clear form
         if (subjectElement) subjectElement.value = '';
         document.getElementById('marks-obtained').value = '';
         document.getElementById('total-marks').value = '';
-        
-        // Refresh data
-        await loadUserData();
         
         // Show success message
         alert('Marks added successfully!');
@@ -4055,6 +4051,35 @@ async function addMarks() {
     }
 }
 
+// Manual refresh function
+async function refreshData() {
+    try {
+        console.log('Refreshing data from server...');
+        await loadUserData();
+        alert('Data refreshed successfully!');
+    } catch (error) {
+        console.error('Error refreshing data:', error);
+        alert('Failed to refresh data: ' + error.message);
+    }
+}
+
+// Add refresh button temporarily for testing
+function addRefreshButton() {
+    const refreshBtn = document.createElement('button');
+    refreshBtn.textContent = '🔄 Refresh Data';
+    refreshBtn.className = 'btn btn-warning';
+    refreshBtn.style.marginLeft = '10px';
+    refreshBtn.onclick = refreshData;
+    
+    const header = document.querySelector('.content-header');
+    if (header && !document.getElementById('refresh-data-btn')) {
+        refreshBtn.id = 'refresh-data-btn';
+        header.appendChild(refreshBtn);
+    }
+}
+
+// Call this in your initApp function
+// addRefreshButton();
 
 
 
@@ -4062,6 +4087,38 @@ async function addMarks() {
 // Add this event listener to your setupEventListeners function
 
 
+// Debug function to check data synchronization
+async function debugDataSync() {
+    console.log('=== DATA SYNC DEBUG ===');
+    
+    // Check local state
+    console.log('Local marks array length:', marks.length);
+    console.log('Local folders count:', folders.length);
+    
+    // Check server state
+    try {
+        const serverData = await dataAPI.getUserData();
+        const serverMarks = collectAllMarks(serverData.folders || []);
+        
+        console.log('Server marks count:', serverMarks.length);
+        console.log('Server folders count:', serverData.folders?.length || 0);
+        
+        // Compare
+        console.log('Marks in sync:', marks.length === serverMarks.length);
+        console.log('Folders in sync:', folders.length === (serverData.folders?.length || 0));
+        
+        if (marks.length !== serverMarks.length) {
+            console.log('⚠️ MARKS OUT OF SYNC!');
+            console.log('Local marks:', marks);
+            console.log('Server marks:', serverMarks);
+        }
+        
+    } catch (error) {
+        console.error('Error checking server data:', error);
+    }
+}
+
+// Call this after any data operation to verify sync
 
 
 
@@ -4738,6 +4795,9 @@ function clearUI() {
 // 📂 LOAD USER DATA
 // ===============================
 // Update this function to maintain the global marks array
+// ===============================
+// 📂 LOAD USER DATA (FIXED VERSION)
+// ===============================
 async function loadUserData() {
     try {
         const data = await dataAPI.getUserData();
@@ -4745,12 +4805,14 @@ async function loadUserData() {
         currentUser = data.user || { username: data.username || data.user?.username || 'User' };
         folders = Array.isArray(data.folders) ? data.folders : (data.folders || []);
         
+        // CRITICAL FIX: Update the global marks array with ALL marks from ALL folders
+        marks = collectAllMarks(folders);
+        
         // Always use backend subjects as source of truth
         if (Array.isArray(data.subjects)) {
             customSubjects = data.subjects;
             console.log('Loaded subjects from backend:', customSubjects);
         } else {
-            // If backend has no subjects, initialize with empty array
             customSubjects = [];
             console.log('No subjects found in backend, initializing empty');
         }
@@ -4768,6 +4830,8 @@ async function loadUserData() {
         updateStats();
         renderChart();
         renderSubjects();
+
+        console.log('User data loaded successfully. Total marks:', marks.length);
 
     } catch (err) {
         console.error('Error loading user data:', err);
