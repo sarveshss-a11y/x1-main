@@ -2565,6 +2565,16 @@ function editFolder(folderId) {
         .catch(err => console.error("Error editing folder:", err));
 }
 
+const findFolderRecursively = (folders, folderId) => {
+    for (const folder of folders) {
+        if (folder.id === folderId) return folder;
+        if (folder.subfolders) {
+            const found = findFolderRecursively(folder.subfolders, folderId);
+            if (found) return found;
+        }
+    }
+    return null;
+};
 // Recursive helper to find a folder by ID
 // Helper function to find folder by ID with better error handling
 function findFolderById(id, list = folders) {
